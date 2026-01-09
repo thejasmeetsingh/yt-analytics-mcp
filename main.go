@@ -2,46 +2,33 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
-	"os"
-	"time"
 
 	goMCP "github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/cache"
+	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/cmd"
 	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/mcp"
-	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/services"
-	"google.golang.org/api/option"
-	"google.golang.org/api/youtube/v3"
-	"google.golang.org/api/youtubeanalytics/v2"
+)
+
+var (
+	clientSecretPath = flag.String("credentials", "", "Path of your google account 'client_secret.json' credentials file")
+	generateToken    = flag.Bool("token", false, "if set, Generates google auth token")
 )
 
 func main() {
-	apiKey := os.Getenv("YOUTUBE_API_KEY")
-	if apiKey == "" {
-		log.Fatal("YOUTUBE_API_KEY environment variable is required")
-		return
-	}
-
+	flag.Parse()
 	ctx := context.Background()
 
-	// Initialize YouTube services
-	var err error
-	services.YoutubeService, err = youtube.NewService(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		log.Fatalf("Failed to create YouTube service: %v", err)
-		return
+	if err := cmd.Run(clientSecretPath, generateToken); err != nil {
+		log.Fatalf("Application failed: %v", err)
 	}
 
-	services.AnalyticsService, err = youtubeanalytics.NewService(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		log.Fatalf("Failed to create Analytics service: %v", err)
-		return
-	}
-
-	// Initialize cache and rate limiter
-	services.Cache = cache.NewCache(5 * time.Minute)
-
+	// Initalize MCP server
 	server, err := mcp.NewMCPServer()
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
 
 	// Run server over stdin/stdout
 	if err := server.Run(ctx, &goMCP.StdioTransport{}); err != nil {
