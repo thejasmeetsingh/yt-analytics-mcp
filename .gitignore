@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+yt-analytics
 
 # Test binary, built with `go test -c`
 *.test
