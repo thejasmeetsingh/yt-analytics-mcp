@@ -100,6 +100,14 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 
 func loadTokenFromFile(filePath string) (*oauth2.Token, error) {
 	file, err := os.Open(filePath)
+
+	// Create token.json file if it doesn't exists
+	if os.IsNotExist(err) {
+		if err := os.WriteFile(filePath, []byte(""), tokenFileMode); err != nil {
+			return nil, err
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("cannot open token file '%s': %v", filePath, err)
 	}
