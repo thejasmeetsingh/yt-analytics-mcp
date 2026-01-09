@@ -35,22 +35,20 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
    - **YouTube Data API v3**
    - **YouTube Analytics API**
 
-### Step 3: Create API Key
+### Step 3: Create OAuth 2.0 credentials
 
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "API Key"
-3. Copy your API key
-4. (Optional but recommended) Restrict the API key to only YouTube APIs
-
-### Step 4: Link YouTube Channel (Important!)
-
-For the Analytics API to work, you need to link your YouTube channel to the Google Cloud Project:
-
-1. Go to your [YouTube Studio](https://studio.youtube.com)
-2. Click Settings > Channel > Advanced settings
-3. Under "Google Account", make sure the same Google account used for the API key has access
-
-**Note**: The API key will only work with channels owned by or managed by the Google account that created the API key.
+1. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
+2. Choose "Desktop app" as application type
+3. Download the JSON file and save it as `client_secret.json`
+4. Make sure to add some branding details and *Test Users*:
+    -  Navigate to console.cloud.google.com
+    - Select your project
+    - In the left sidebar, go to: APIs & Services → OAuth consent screen
+    - Scroll down to the "Test users" section
+    - Click "+ ADD USERS"
+    - Enter your Google/Gmail email address (the one associated with your YouTube channel)
+    - Click Save
+    - *Make sure "User Type" is set to "External" (unless you have a Google Workspace account)*
 
 ## Installation
 
@@ -79,6 +77,11 @@ scoop bucket add thejasmeetsingh https://github.com/thejasmeetsingh/yt-analytics
 scoop install thejasmeetsingh/yt-analytics-mcp
 ```
 
+### Generate Auth Token
+```bash
+yt-analytics-mcp -credentials=/path/to/client_secret.json -token
+```
+
 ## MCP Configuration
 
 Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claude Desktop):
@@ -88,9 +91,10 @@ Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claud
   "mcpServers": {
     "youtube-analytics": {
       "command": "yt-analytics-mcp",  // "yt-analytics-mcp.exe" for windows
-      "env": {
-        "YOUTUBE_API_KEY": "your-api-key-here"
-      }
+      "args": [
+        "-credentials",
+        "/path/to/client_secret.json"
+      ]
     }
   }
 }
@@ -313,9 +317,8 @@ The rate limiter in this server helps prevent hitting rate limits, but monitor y
 
 Potential improvements for future versions:
 
-- [ ] OAuth 2.0 authentication for full analytics access
+- [ ] Multiple accounts and channels
 - [ ] Demographics data support
-- [ ] Revenue analytics (requires OAuth)
 - [ ] Comparison tools (channel vs channel, video vs video)
 - [ ] Export to CSV/JSON
 - [ ] Persistent caching (Redis/File-based)
