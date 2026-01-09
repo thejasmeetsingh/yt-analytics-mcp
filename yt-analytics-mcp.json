@@ -1,19 +1,19 @@
 {
-    "version": "1.0.4",
+    "version": "1.0.5",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v1.0.4/yt-analytics-mcp_1.0.4_Windows_x86_64.zip",
+            "url": "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v1.0.5/yt-analytics-mcp_1.0.5_Windows_x86_64.zip",
             "bin": [
                 "yt-analytics-mcp.exe"
             ],
-            "hash": "2a3201288a5e6a7a64da70c1bb38c71b49f9d26093da042bab9a22f2ff9109bc"
+            "hash": "ce50cbbaa40329edf5befa21e04c2df30717d3aae48aaf7781928ad16865bbc7"
         },
         "arm64": {
-            "url": "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v1.0.4/yt-analytics-mcp_1.0.4_Windows_arm64.zip",
+            "url": "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v1.0.5/yt-analytics-mcp_1.0.5_Windows_arm64.zip",
             "bin": [
                 "yt-analytics-mcp.exe"
             ],
-            "hash": "15bae7d75cc17eabc91c078c184dd722953fad3aba1d3727f4797b1639229b61"
+            "hash": "81e18a74d41a33f568a48832b960fcf2062ab22f75601bf2380c6bb6e89b3b02"
         }
     },
     "homepage": "https://github.com/thejasmeetsingh/yt-analytics-mcp",
