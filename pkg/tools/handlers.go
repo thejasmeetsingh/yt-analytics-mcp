@@ -10,19 +10,13 @@ import (
 	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/services"
 )
 
-var (
-	cache            = services.Cache
-	youtubeService   = services.YoutubeService
-	analyticsService = services.AnalyticsService
-)
-
 func ListChannelsHandler(ctx context.Context, req *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	key := "channels_list"
-	if cached, ok := cache.Get(key); ok {
+	if cached, ok := services.Cache.Get(key); ok {
 		return nil, MarkdownOutput{Content: cached}, nil
 	}
 
-	resp, err := youtubeService.Channels.List([]string{"snippet", "statistics"}).Mine(true).Do()
+	resp, err := services.YoutubeService.Channels.List([]string{"snippet", "statistics"}).Mine(true).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
@@ -38,19 +32,19 @@ func ListChannelsHandler(ctx context.Context, req *mcp.CallToolRequest, _ EmptyI
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
 func GetChannelDetailsHandler(ctx context.Context, req *mcp.CallToolRequest, input ChannelIDInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	key := "ch_" + input.ChannelID
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	resp, err := youtubeService.Channels.List([]string{"snippet", "statistics"}).Id(input.ChannelID).Do()
+	resp, err := services.YoutubeService.Channels.List([]string{"snippet", "statistics"}).Id(input.ChannelID).Do()
 	if err != nil || len(resp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
@@ -60,7 +54,7 @@ func GetChannelDetailsHandler(ctx context.Context, req *mcp.CallToolRequest, inp
 		ch.Snippet.Title, formatNumber(ch.Statistics.SubscriberCount),
 		formatNumber(ch.Statistics.VideoCount), formatNumber(ch.Statistics.ViewCount))
 
-	cache.Set(key, md)
+	services.Cache.Set(key, md)
 	return nil, MarkdownOutput{Content: md}, nil
 }
 
@@ -70,13 +64,13 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 
 	key := fmt.Sprintf("analytics_%s_%s_%s", input.ChannelID, start, end)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
 	metrics := "views,estimatedMinutesWatched,likes,comments,shares,subscribersGained,subscribersLost,averageViewDuration,averageViewPercentage"
-	resp, err := analyticsService.Reports.Query().
+	resp, err := services.AnalyticsService.Reports.Query().
 		Ids("channel==" + input.ChannelID).StartDate(start).EndDate(end).
 		Metrics(metrics).Dimensions("day").Do()
 	if err != nil {
@@ -116,7 +110,7 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		formatNumber(uint64(subsLost)), formatNumber(uint64(subsGained-subsLost)),
 		avgDuration, avgPercent, float64(likes+comments+shares)/float64(views)*100)
 
-	cache.Set(key, md)
+	services.Cache.Set(key, md)
 	return nil, MarkdownOutput{Content: md}, nil
 }
 
@@ -128,18 +122,18 @@ func GetVideoListHandler(ctx context.Context, req *mcp.CallToolRequest, input Vi
 
 	key := fmt.Sprintf("videos_%s_%d", input.ChannelID, maxResults)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	chResp, err := youtubeService.Channels.List([]string{"contentDetails"}).Id(input.ChannelID).Do()
+	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(input.ChannelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
 	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
-	resp, err := youtubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
+	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
 		PlaylistId(playlistID).MaxResults(maxResults).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
@@ -153,7 +147,7 @@ func GetVideoListHandler(ctx context.Context, req *mcp.CallToolRequest, input Vi
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
@@ -163,7 +157,7 @@ func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, inp
 
 	key := fmt.Sprintf("video_analytics_%s_%s_%s", input.VideoIDs, start, end)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
@@ -173,7 +167,7 @@ func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, inp
 		ids[i] = strings.TrimSpace(ids[i])
 	}
 
-	videoResp, err := youtubeService.Videos.List([]string{"snippet", "statistics"}).
+	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics"}).
 		Id(strings.Join(ids, ",")).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
@@ -188,7 +182,7 @@ func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, inp
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
@@ -202,7 +196,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 
 	key := fmt.Sprintf("compare_periods_%s_%s_%s_%s_%s", channelID, p1Start, p1End, p2Start, p2End)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
@@ -210,7 +204,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	metrics := "views,estimatedMinutesWatched,likes,comments,shares,subscribersGained,subscribersLost,averageViewDuration,averageViewPercentage"
 
 	// Get period 1 data
-	resp1, err := analyticsService.Reports.Query().
+	resp1, err := services.AnalyticsService.Reports.Query().
 		Ids("channel==" + channelID).StartDate(p1Start).EndDate(p1End).
 		Metrics(metrics).Dimensions("day").Do()
 	if err != nil {
@@ -218,7 +212,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	}
 
 	// Get period 2 data
-	resp2, err := analyticsService.Reports.Query().
+	resp2, err := services.AnalyticsService.Reports.Query().
 		Ids("channel==" + channelID).StartDate(p2Start).EndDate(p2End).
 		Metrics(metrics).Dimensions("day").Do()
 	if err != nil {
@@ -347,7 +341,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
@@ -359,7 +353,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 
 	key := fmt.Sprintf("compare_videos_%s_%s_%s", videoIDs, start, end)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
@@ -369,7 +363,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 		ids[i] = strings.TrimSpace(ids[i])
 	}
 
-	videoResp, err := youtubeService.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
+	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
 		Id(strings.Join(ids, ",")).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
@@ -399,7 +393,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 		}
 
 		metrics := "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares"
-		analyticsResp, err := analyticsService.Reports.Query().
+		analyticsResp, err := services.AnalyticsService.Reports.Query().
 			Ids("channel==MINE").StartDate(start).EndDate(end).
 			Metrics(metrics).Filters("video==" + video.Id).Do()
 
@@ -475,7 +469,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
@@ -486,19 +480,19 @@ func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequ
 
 	key := fmt.Sprintf("compare_schedule_%s_%d_%d", channelID, lookback, maxVids)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
 	// Get channel's uploads
-	chResp, err := youtubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
+	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
 	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
-	resp, err := youtubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
+	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
 		PlaylistId(playlistID).MaxResults(int64(maxVids)).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
@@ -530,7 +524,7 @@ func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequ
 		videoID := item.ContentDetails.VideoId
 
 		// Get video stats
-		videoResp, err := youtubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
+		videoResp, err := services.YoutubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
 		if err != nil || len(videoResp.Items) == 0 {
 			continue
 		}
@@ -541,7 +535,7 @@ func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequ
 
 		// Get analytics
 		metrics := "shares"
-		analyticsResp, _ := analyticsService.Reports.Query().
+		analyticsResp, _ := services.AnalyticsService.Reports.Query().
 			Ids("channel==MINE").StartDate(startDate).EndDate(endDate).
 			Metrics(metrics).Filters("video==" + videoID).Do()
 
@@ -640,7 +634,7 @@ func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequ
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
@@ -652,7 +646,7 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 
 	key := fmt.Sprintf("compare_formats_%s_%s_%d_%d", channelID, keywords, lookback, maxVids)
 	if !input.ForceRefresh {
-		if cached, ok := cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
@@ -663,13 +657,13 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 
 	// Get channel's uploads
-	chResp, err := youtubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
+	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
 	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
-	resp, err := youtubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
+	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
 		PlaylistId(playlistID).MaxResults(int64(maxVids)).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
@@ -712,7 +706,7 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		}
 
 		// Get video stats
-		videoResp, err := youtubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
+		videoResp, err := services.YoutubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
 		if err != nil || len(videoResp.Items) == 0 {
 			continue
 		}
@@ -723,7 +717,7 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 
 		// Get analytics
 		metrics := "estimatedMinutesWatched,averageViewDuration,averageViewPercentage,shares"
-		analyticsResp, _ := analyticsService.Reports.Query().
+		analyticsResp, _ := services.AnalyticsService.Reports.Query().
 			Ids("channel==MINE").StartDate(startDate).EndDate(endDate).
 			Metrics(metrics).Filters("video==" + videoID).Do()
 
@@ -823,6 +817,6 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 
 	result := md.String()
-	cache.Set(key, result)
+	services.Cache.Set(key, result)
 	return nil, MarkdownOutput{Content: result}, nil
 }
