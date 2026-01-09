@@ -12,7 +12,7 @@ import (
 func NewMCPServer() (*goMCP.Server, error) {
 	// Create MCP server
 	server := goMCP.NewServer(&goMCP.Implementation{
-		Name:    "youtube-analytics-goMCP",
+		Name:    "youtube-analytics",
 		Version: "1.0.0",
 	}, nil)
 

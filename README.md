@@ -54,57 +54,29 @@ For the Analytics API to work, you need to link your YouTube channel to the Goog
 
 ## Installation
 
-### 1. Clone/Create the Project
+### macOS
 
 ```bash
-mkdir youtube-mcp-server
-cd youtube-mcp-server
+brew tap thejasmeetsingh/yt-analytics-mcp https://github.com/thejasmeetsingh/yt-analytics-mcp
+brew install --cask yt-analytics-mcp  # or: brew install yt-analytics-mcp
 ```
 
-### 2. Initialize Go Module
-
-Create `go.mod`:
-
-```go
-module youtube-mcp-server
-
-go 1.21
-
-require (
-	google.golang.org/api v0.154.0
-)
-```
-
-### 3. Download Dependencies
+### Linux
 
 ```bash
-go mod download
+wget https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v{tag}/yt-analytics-mcp_{tag}_linux_x86_64.deb
+sudo dpkg -i yt-analytics-mcp_{tag}_linux_x86_64.deb
 ```
 
-### 4. Set Up Environment Variable
+**Note:**
+Replace `{tag}` with the specific version number from the repository (e.g., `0.1.0`).
+This tag corresponds to the release version available on the GitHub repository.
 
-**Linux/Mac:**
+### Windows
 
 ```bash
-export YOUTUBE_API_KEY="your-api-key-here"
-```
-
-**Windows (PowerShell):**
-
-```powershell
-$env:YOUTUBE_API_KEY="your-api-key-here"
-```
-
-**Or create a `.env` file:**
-
-```bash
-YOUTUBE_API_KEY=your-api-key-here
-```
-
-### 5. Build the Server
-
-```bash
-go build -o youtube-mcp-server
+scoop bucket add thejasmeetsingh https://github.com/thejasmeetsingh/yt-analytics-mcp
+scoop install thejasmeetsingh/yt-analytics-mcp
 ```
 
 ## MCP Configuration
@@ -115,7 +87,7 @@ Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claud
 {
   "mcpServers": {
     "youtube-analytics": {
-      "command": "/path/to/youtube-mcp-server",
+      "command": "yt-analytics-mcp",  // yt-analytics-mcp.exe for windows
       "env": {
         "YOUTUBE_API_KEY": "your-api-key-here"
       }
@@ -293,20 +265,9 @@ This analyzes:
 
 ## Rate Limiting & Caching
 
-- **Rate Limit**: 10 requests per second
+- **Rate Limit**: 5 requests per second - Burst is 10
 - **Cache TTL**: 5 minutes
 - **Force Refresh**: Use `force_refresh: true` to bypass cache
-
-## Project Structure
-
-```
-youtube-mcp-server/
-├── main.go              # Main server implementation
-├── tools.go             # MCP tools definitions
-├── go.mod               # Go module definition
-├── go.sum               # Dependency checksums
-└── README.md            # This file
-```
 
 ## Troubleshooting
 
@@ -371,19 +332,6 @@ Feel free to open issues or submit pull requests for improvements!
 MIT License - feel free to use this for your projects!
 
 ---
-
-## Quick Start Example
-
-```bash
-# Set your API key
-export YOUTUBE_API_KEY="AIza..."
-
-# Build
-go build -o youtube-mcp-server
-
-# The server communicates via stdin/stdout (MCP protocol)
-# It's meant to be used with an MCP client like Claude Desktop
-```
 
 Once configured with Claude Desktop, you can ask:
 
