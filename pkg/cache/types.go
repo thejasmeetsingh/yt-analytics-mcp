@@ -6,7 +6,7 @@ import (
 )
 
 type CacheEntry struct {
-	Data      interface{}
+	Data      string
 	Timestamp time.Time
 }
 

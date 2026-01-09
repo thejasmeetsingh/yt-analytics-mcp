@@ -1,13 +1,13 @@
-package mcp
+package tools
 
 import (
 	"fmt"
 	"time"
 )
 
-func getDateOrDefault(val interface{}, daysOffset int) string {
-	if s, ok := val.(string); ok && s != "" {
-		return s
+func getDateOrDefault(val string, daysOffset int) string {
+	if val != "" {
+		return val
 	}
 	return time.Now().AddDate(0, 0, daysOffset).Format("2006-01-02")
 }

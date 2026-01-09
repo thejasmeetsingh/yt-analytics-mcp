@@ -2,7 +2,11 @@ module github.com/thejasmeetsingh/yt-analytics-mcp
 
 go 1.25.4
 
-require google.golang.org/api v0.259.0
+require (
+	github.com/modelcontextprotocol/go-sdk v1.2.0
+	golang.org/x/time v0.14.0
+	google.golang.org/api v0.259.0
+)
 
 require (
 	cloud.google.com/go/auth v0.18.0 // indirect
@@ -11,10 +15,12 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
