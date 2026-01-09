@@ -19,6 +19,7 @@ func main() {
 	apiKey := os.Getenv("YOUTUBE_API_KEY")
 	if apiKey == "" {
 		log.Fatal("YOUTUBE_API_KEY environment variable is required")
+		return
 	}
 
 	ctx := context.Background()
@@ -28,11 +29,13 @@ func main() {
 	services.YoutubeService, err = youtube.NewService(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		log.Fatalf("Failed to create YouTube service: %v", err)
+		return
 	}
 
 	services.AnalyticsService, err = youtubeanalytics.NewService(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		log.Fatalf("Failed to create Analytics service: %v", err)
+		return
 	}
 
 	// Initialize cache and rate limiter
