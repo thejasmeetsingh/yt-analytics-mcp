@@ -87,7 +87,7 @@ Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claud
 {
   "mcpServers": {
     "youtube-analytics": {
-      "command": "yt-analytics-mcp",  // yt-analytics-mcp.exe for windows
+      "command": "yt-analytics-mcp",  // "yt-analytics-mcp.exe" for windows
       "env": {
         "YOUTUBE_API_KEY": "your-api-key-here"
       }
