@@ -21,17 +21,20 @@ func main() {
 
 	if err := cmd.Run(clientSecretPath, generateToken); err != nil {
 		log.Fatalf("Application failed: %v", err)
-	}
-
-	// Initalize MCP server
-	server, err := mcp.NewMCPServer()
-	if err != nil {
-		log.Fatal(err)
 		return
 	}
 
-	// Run server over stdin/stdout
-	if err := server.Run(ctx, &goMCP.StdioTransport{}); err != nil {
-		log.Fatal(err)
+	if !(*generateToken) {
+		// Initalize MCP server
+		server, err := mcp.NewMCPServer()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		// Run server over stdin/stdout
+		if err := server.Run(ctx, &goMCP.StdioTransport{}); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
