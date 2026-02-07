@@ -313,19 +313,6 @@ YouTube Data API v3 has a quota limit of **10,000 units per day** by default:
 
 The rate limiter in this server helps prevent hitting rate limits, but monitor your daily quota in the Google Cloud Console.
 
-## Future Enhancements
-
-Potential improvements for future versions:
-
-- [ ] Multiple accounts and channels
-- [ ] Demographics data support
-- [ ] Comparison tools (channel vs channel, video vs video)
-- [ ] Export to CSV/JSON
-- [ ] Persistent caching (Redis/File-based)
-- [ ] Pagination for large video lists
-- [ ] Real-time subscriber count
-- [ ] Thumbnail and metadata management
-
 ## Contributing
 
 Feel free to open issues or submit pull requests for improvements!
