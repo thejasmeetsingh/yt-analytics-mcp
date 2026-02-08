@@ -6,14 +6,14 @@
             "bin": [
                 "yt-analytics-mcp.exe"
             ],
-            "hash": "263291dbcaf79ad9f47322ebf7afb6cee5d960bba3cd50620679dadd41bf266e"
+            "hash": "951b004977ea5c395980eb1f88a8fe0e642df80522b650a1cf56c453a5c37428"
         },
         "arm64": {
             "url": "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v1.0.6/yt-analytics-mcp_1.0.6_Windows_arm64.zip",
             "bin": [
                 "yt-analytics-mcp.exe"
             ],
-            "hash": "109b18aa24dcdcd535611e4964af5e953e4f78126bacad572a60ea4e108c0acd"
+            "hash": "d3a1f4b298cc29146a9b40714b4f55adbeb892de81beffbf9dcde531a7c0dd65"
         }
     },
     "homepage": "https://github.com/thejasmeetsingh/yt-analytics-mcp",
