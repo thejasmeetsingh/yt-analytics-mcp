@@ -55,10 +55,10 @@ func GetClient(rootPath string, config *oauth2.Config, generateToken bool) (*htt
 	// Try to load existing token
 	token, err := loadTokenFromFile(tokenPath)
 	if err != nil {
-		if !generateToken {
-			return nil, fmt.Errorf("%w (use -token flag to generate new token): %v", ErrReadingToken, err)
-		}
+		return nil, err
+	}
 
+	if generateToken {
 		// Generate new token via web OAuth flow
 		token, err = getTokenFromWeb(config)
 		if err != nil {
