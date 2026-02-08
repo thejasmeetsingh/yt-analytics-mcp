@@ -14,22 +14,22 @@ cask "yt-analytics-mcp" do
   on_macos do
     on_intel do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Darwin_x86_64.tar.gz"
-      sha256 "1c39a5badcb4387a8d3254c63e8c7edeeec385569b7634f0e132016086a92eab"
+      sha256 "fec684582de80fe1d71e8209619796dd05a9af550ce6b1a34df6e15dc96adbf0"
     end
     on_arm do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Darwin_arm64.tar.gz"
-      sha256 "f2dab6b1fc1b6f8aca360b0ff1a4b440ee57ece53d5b2194a51ccd06afeee656"
+      sha256 "a265e2a1952a509e36949f3d87a894ec750ccc9a32126dd377a4536817684a1c"
     end
   end
 
   on_linux do
     on_intel do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Linux_x86_64.tar.gz"
-      sha256 "a2258cb1ec2dbb23268047893bd1c229793e3d781ec661f83d91bb7f72ad65db"
+      sha256 "33b351abf7df62d69658aa6034ea8bd238b739cdd5233f389e2909f97436fb64"
     end
     on_arm do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Linux_arm64.tar.gz"
-      sha256 "bb0d738f6da4e6203adb87aada15964698189b9b96c292c7c9389bc1a7922e36"
+      sha256 "05279732b6bce84fc56e5dd3bc536e87b5ac13c1ad746a87ea2d09d189b58083"
     end
   end
 
