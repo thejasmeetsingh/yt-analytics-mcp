@@ -13,11 +13,9 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 
 ## Prerequisites
 
-1. **YouTube API Key**: You need a Google Cloud API key with the following APIs enabled:
-   - YouTube Data API v3
-   - YouTube Analytics API
-
-2. **Go**: Version 1.21 or higher
+**YouTube API Access**: You need a Google Cloud OAuth 2.0 client ID with the following APIs enabled:
+  - YouTube Data API v3
+  - YouTube Analytics API
 
 ## Getting Your YouTube Credentials
 
@@ -25,7 +23,7 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
-3. Enable billing (required for API access)
+3. Enable billing (required for API access) - No payment is required for testing
 
 ### Step 2: Enable Required APIs
 
