@@ -137,10 +137,7 @@ func GetVideoListHandler(ctx context.Context, req *mcp.CallToolRequest, input Vi
 }
 
 func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	start := getDateOrDefault(input.StartDate, -30)
-	end := getDateOrDefault(input.EndDate, 0)
-
-	key := fmt.Sprintf("video_analytics_%s_%s_%s", input.VideoIDs, start, end)
+	key := fmt.Sprintf("video_analytics_%s", input.VideoIDs)
 	if !input.ForceRefresh {
 		if cached, ok := services.Cache.Get(key); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
@@ -159,7 +156,7 @@ func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, inp
 	}
 
 	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# Video Analytics (%s to %s)\n\n", start, end))
+	md.WriteString("# Video Analytics\n\n")
 	for _, video := range videoResp.Items {
 		md.WriteString(fmt.Sprintf("## %s\n\n- **ID**: `%s`\n- **Views**: %s\n- **Likes**: %s\n- **Comments**: %s\n\n",
 			video.Snippet.Title, video.Id, formatNumber(video.Statistics.ViewCount),

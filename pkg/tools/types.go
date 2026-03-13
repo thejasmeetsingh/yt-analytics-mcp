@@ -21,9 +21,7 @@ type VideoListInput struct {
 }
 
 type VideoAnalyticsInput struct {
-	VideoIDs     string `json:"video_ids" jsonschema:"Comma-separated list of video IDs (e.g. abc123 def456)"`
-	StartDate    string `json:"start_date,omitempty" jsonschema:"Start date in YYYY-MM-DD format (default: 30 days ago)"`
-	EndDate      string `json:"end_date,omitempty" jsonschema:"End date in YYYY-MM-DD format (default: today)"`
+	VideoIDs     string `json:"video_ids" jsonschema:"Comma-separated list of video IDs (e.g. abc123, def456)"`
 	ForceRefresh bool   `json:"force_refresh,omitempty" jsonschema:"Force refresh data ignoring cache"`
 }
 
