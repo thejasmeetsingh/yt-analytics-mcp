@@ -14,13 +14,12 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 ## Prerequisites
 
 1. **YouTube API Key**: You need a Google Cloud API key with the following APIs enabled:
-
    - YouTube Data API v3
    - YouTube Analytics API
 
 2. **Go**: Version 1.21 or higher
 
-## Getting Your YouTube API Key
+## Getting Your YouTube Credentials
 
 ### Step 1: Create a Google Cloud Project
 
@@ -40,15 +39,15 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 1. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
 2. Choose "Desktop app" as application type
 3. Download the JSON file and save it as `client_secret.json`
-4. Make sure to add some branding details and *Test Users*:
-    -  Navigate to console.cloud.google.com
-    - Select your project
-    - In the left sidebar, go to: APIs & Services → OAuth consent screen
-    - Scroll down to the "Test users" section
-    - Click "+ ADD USERS"
-    - Enter your Google/Gmail email address (the one associated with your YouTube channel)
-    - Click Save
-    - *Make sure "User Type" is set to "External" (unless you have a Google Workspace account)*
+4. Make sure to add some branding details and _Test Users_:
+   - Navigate to console.cloud.google.com
+   - Select your project
+   - In the left sidebar, go to: APIs & Services → OAuth consent screen
+   - Scroll down to the "Test users" section
+   - Click "+ ADD USERS"
+   - Enter your Google/Gmail email address (the one associated with your YouTube channel)
+   - Click Save
+   - _Make sure "User Type" is set to "External" (unless you have a Google Workspace account)_
 
 ## Installation
 
@@ -78,6 +77,7 @@ scoop install thejasmeetsingh/yt-analytics-mcp
 ```
 
 ### Generate Auth Token
+
 ```bash
 yt-analytics-mcp -credentials=/path/to/client_secret.json -token
 ```
@@ -90,11 +90,8 @@ Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claud
 {
   "mcpServers": {
     "youtube-analytics": {
-      "command": "yt-analytics-mcp",  // "yt-analytics-mcp.exe" for windows
-      "args": [
-        "-credentials",
-        "/path/to/client_secret.json"
-      ]
+      "command": "yt-analytics-mcp", // "yt-analytics-mcp.exe" for windows
+      "args": ["-credentials", "/path/to/client_secret.json"]
     }
   }
 }
