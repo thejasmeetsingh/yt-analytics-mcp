@@ -40,6 +40,7 @@ func GetConfig(path string) (*oauth2.Config, error) {
 		credentialsData,
 		youtube.YoutubeReadonlyScope,              // Read-only access to YouTube account
 		youtube.YoutubepartnerScope,               // Partner-level access
+		youtube.YoutubeForceSslScope,              // Force SSL access
 		youtubeanalytics.YtAnalyticsReadonlyScope, // Analytics data access
 	)
 	if err != nil {
