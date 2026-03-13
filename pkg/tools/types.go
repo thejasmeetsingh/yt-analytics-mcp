@@ -58,6 +58,12 @@ type CompareFormatsInput struct {
 	ForceRefresh   bool   `json:"force_refresh,omitempty" jsonschema:"Force refresh data ignoring cache"`
 }
 
+type VideoCommentsInput struct {
+	VideoID      string `json:"video_id" jsonschema:"The YouTube video ID"`
+	MaxResults   int64  `json:"max_results,omitempty" jsonschema:"Maximum number of comments to return (default: 50, max: 100)"`
+	ForceRefresh bool   `json:"force_refresh,omitempty" jsonschema:"Force refresh data ignoring cache"`
+}
+
 type MarkdownOutput struct {
 	Content string `json:"content" jsonschema:"Markdown formatted output"`
 }

@@ -10,6 +10,35 @@ import (
 	"github.com/thejasmeetsingh/yt-analytics-mcp/pkg/services"
 )
 
+var (
+	VIDEO_METRICS = []string{
+		"views",
+		"estimatedMinutesWatched",
+		"averageViewDuration",
+		"averageViewPercentage",
+		"likes",
+		"comments",
+		"shares",
+	}
+
+	CHANNEL_METRICS = []string{
+		"views",
+		"estimatedMinutesWatched",
+		"likes",
+		"dislikes",
+		"comments",
+		"shares",
+		"subscribersGained",
+		"subscribersLost",
+		"averageViewDuration",
+		"averageViewPercentage",
+		"annotationClickThroughRate",
+		"annotationClickableImpressions",
+		"videoThumbnailImpressions",
+		"videoThumbnailImpressionsClickRate",
+	}
+)
+
 func ListChannelsHandler(ctx context.Context, req *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	key := "channels_list"
 	if cached, ok := services.Cache.Get(key); ok {
@@ -36,28 +65,6 @@ func ListChannelsHandler(ctx context.Context, req *mcp.CallToolRequest, _ EmptyI
 	return nil, MarkdownOutput{Content: result}, nil
 }
 
-func GetChannelDetailsHandler(ctx context.Context, req *mcp.CallToolRequest, input ChannelIDInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	key := "ch_" + input.ChannelID
-	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
-			return nil, MarkdownOutput{Content: cached}, nil
-		}
-	}
-
-	resp, err := services.YoutubeService.Channels.List([]string{"snippet", "statistics"}).Id(input.ChannelID).Do()
-	if err != nil || len(resp.Items) == 0 {
-		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
-	}
-
-	ch := resp.Items[0]
-	md := fmt.Sprintf("# %s\n\n## Statistics\n\n- **Subscribers**: %s\n- **Videos**: %s\n- **Views**: %s\n",
-		ch.Snippet.Title, formatNumber(ch.Statistics.SubscriberCount),
-		formatNumber(ch.Statistics.VideoCount), formatNumber(ch.Statistics.ViewCount))
-
-	services.Cache.Set(key, md)
-	return nil, MarkdownOutput{Content: md}, nil
-}
-
 func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input ChannelAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	start := getDateOrDefault(input.StartDate, -30)
 	end := getDateOrDefault(input.EndDate, 0)
@@ -69,7 +76,8 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		}
 	}
 
-	metrics := "views,estimatedMinutesWatched,likes,comments,shares,subscribersGained,subscribersLost,averageViewDuration,averageViewPercentage"
+	metrics := strings.Join(CHANNEL_METRICS, ",")
+
 	resp, err := services.AnalyticsService.Reports.Query().
 		Ids("channel==" + input.ChannelID).StartDate(start).EndDate(end).
 		Metrics(metrics).Dimensions("day").Do()
@@ -77,23 +85,26 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		return nil, MarkdownOutput{}, err
 	}
 
-	var views, watchTime, likes, comments, shares, subsGained, subsLost int64
-	var avgDuration, avgPercent float64
+	var views, watchTime, likes, dislikes, comments, shares, subsGained, subsLost int64
+	var avgDuration, avgPercent, clickThroughRate, clickImpressions, thumbImpressions, thumbImpressionCtr float64
+
 	for _, row := range resp.Rows {
-		if len(row) >= 9 {
-			views += int64(row[1].(float64))
-			watchTime += int64(row[2].(float64))
-			likes += int64(row[3].(float64))
-			comments += int64(row[4].(float64))
-			shares += int64(row[5].(float64))
-			subsGained += int64(row[6].(float64))
-			subsLost += int64(row[7].(float64))
-			avgDuration += row[8].(float64)
-			if len(row) >= 10 {
-				avgPercent += row[9].(float64)
-			}
-		}
+		views += int64(row[1].(float64))
+		watchTime += int64(row[2].(float64))
+		likes += int64(row[3].(float64))
+		dislikes += int64(row[4].(float64))
+		comments += int64(row[5].(float64))
+		shares += int64(row[6].(float64))
+		subsGained += int64(row[7].(float64))
+		subsLost += int64(row[8].(float64))
+		avgDuration += row[9].(float64)
+		avgPercent += row[10].(float64)
+		clickThroughRate += row[11].(float64)
+		clickImpressions += row[12].(float64)
+		thumbImpressions += row[13].(float64)
+		thumbImpressionCtr += row[14].(float64)
 	}
+
 	if len(resp.Rows) > 0 {
 		avgDuration /= float64(len(resp.Rows))
 		avgPercent /= float64(len(resp.Rows))
@@ -103,12 +114,15 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		"- **Views**: %s\n- **Watch Time**: %.1f hours\n- **Likes**: %s\n"+
 		"- **Comments**: %s\n- **Shares**: %s\n- **Subs Gained**: %s\n"+
 		"- **Subs Lost**: %s\n- **Net Subs**: %s\n- **Avg Duration**: %.0fs\n"+
-		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n",
+		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n"+
+		"- **Annotation Click Through Rate %%**: %.1f%%\n- **Annotation Clickable Impressions**: %.1f%%\n"+
+		"- **Video Thumbnail Impressions %%**: %.1f%%\n- **Video Thumbnail Impressions Click Rate**: %.1f%%\n",
 		start, end, formatNumber(uint64(views)), float64(watchTime)/60,
 		formatNumber(uint64(likes)), formatNumber(uint64(comments)),
 		formatNumber(uint64(shares)), formatNumber(uint64(subsGained)),
 		formatNumber(uint64(subsLost)), formatNumber(uint64(subsGained-subsLost)),
-		avgDuration, avgPercent, float64(likes+comments+shares)/float64(views)*100)
+		avgDuration, avgPercent, float64(likes+comments+shares)/float64(views)*100,
+		clickThroughRate, clickImpressions, thumbImpressions, thumbImpressionCtr)
 
 	services.Cache.Set(key, md)
 	return nil, MarkdownOutput{Content: md}, nil
@@ -201,7 +215,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 		}
 	}
 
-	metrics := "views,estimatedMinutesWatched,likes,comments,shares,subscribersGained,subscribersLost,averageViewDuration,averageViewPercentage"
+	metrics := strings.Join(CHANNEL_METRICS, ",")
 
 	// Get period 1 data
 	resp1, err := services.AnalyticsService.Reports.Query().
@@ -223,28 +237,32 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	calcTotals := func(rows [][]interface{}) map[string]float64 {
 		totals := map[string]float64{}
 		for _, row := range rows {
-			if len(row) >= 9 {
-				totals["views"] += row[1].(float64)
-				totals["watchTime"] += row[2].(float64)
-				totals["likes"] += row[3].(float64)
-				totals["comments"] += row[4].(float64)
-				totals["shares"] += row[5].(float64)
-				totals["subsGained"] += row[6].(float64)
-				totals["subsLost"] += row[7].(float64)
-				totals["avgDuration"] += row[8].(float64)
-				if len(row) >= 10 {
-					totals["avgPercent"] += row[9].(float64)
-				}
-			}
+			totals["views"] += row[1].(float64)
+			totals["watchTime"] += row[2].(float64)
+			totals["likes"] += row[3].(float64)
+			totals["dislikes"] += row[4].(float64)
+			totals["comments"] += row[4].(float64)
+			totals["shares"] += row[5].(float64)
+			totals["subsGained"] += row[6].(float64)
+			totals["subsLost"] += row[7].(float64)
+			totals["avgDuration"] += row[8].(float64)
+			totals["avgPercent"] += row[9].(float64)
+			totals["clickThroughRate"] += row[11].(float64)
+			totals["clickImpressions"] += row[12].(float64)
+			totals["thumbImpressions"] += row[13].(float64)
+			totals["thumbImpressionCtr"] += row[14].(float64)
 		}
+
 		if len(rows) > 0 {
 			totals["avgDuration"] /= float64(len(rows))
 			totals["avgPercent"] /= float64(len(rows))
 		}
+
 		totals["engagement"] = 0
 		if totals["views"] > 0 {
 			totals["engagement"] = (totals["likes"] + totals["comments"] + totals["shares"]) / totals["views"] * 100
 		}
+
 		return totals
 	}
 
@@ -297,6 +315,7 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	addRow("Views", p1["views"], p2["views"], false, false)
 	addRow("Watch Time", p1["watchTime"], p2["watchTime"], true, false)
 	addRow("Likes", p1["likes"], p2["likes"], false, false)
+	addRow("Dislikes", p1["dislikes"], p2["dislikes"], false, false)
 	addRow("Comments", p1["comments"], p2["comments"], false, false)
 	addRow("Shares", p1["shares"], p2["shares"], false, false)
 	addRow("Subs Gained", p1["subsGained"], p2["subsGained"], false, false)
@@ -307,6 +326,10 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	addRow("Avg View Duration", p1["avgDuration"], p2["avgDuration"], false, false)
 	addRow("Avg View %", p1["avgPercent"], p2["avgPercent"], false, true)
 	addRow("Engagement Rate", p1["engagement"], p2["engagement"], false, true)
+	addRow("Annotation Click Through Rate", p1["clickThroughRate"], p2["clickThroughRate"], false, false)
+	addRow("Annotation Clickable Impressions", p1["clickImpressions"], p2["clickImpressions"], false, false)
+	addRow("Video Thumbnail Impressions", p1["thumbImpressions"], p2["thumbImpressions"], false, false)
+	addRow("Video Thumbnail Impressions Click Rate", p1["thumbImpressionCtr"], p2["thumbImpressionCtr"], false, false)
 
 	md.WriteString("\n## Key Insights\n\n")
 	insights := []string{}
@@ -392,21 +415,20 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 			Comments: video.Statistics.CommentCount,
 		}
 
-		metrics := "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares"
+		metrics := strings.Join(VIDEO_METRICS, ",")
+
 		analyticsResp, err := services.AnalyticsService.Reports.Query().
 			Ids("channel==MINE").StartDate(start).EndDate(end).
 			Metrics(metrics).Filters("video==" + video.Id).Do()
 
 		if err == nil && len(analyticsResp.Rows) > 0 {
 			row := analyticsResp.Rows[0]
-			if len(row) >= 7 {
-				vd.WatchTime = row[1].(float64)
-				vd.AvgDuration = row[2].(float64)
-				vd.AvgPercent = row[3].(float64)
-				vd.Shares = row[6].(float64)
-				if vd.Views > 0 {
-					vd.Engagement = (float64(vd.Likes) + float64(vd.Comments) + vd.Shares) / float64(vd.Views) * 100
-				}
+			vd.WatchTime = row[1].(float64)
+			vd.AvgDuration = row[2].(float64)
+			vd.AvgPercent = row[3].(float64)
+			vd.Shares = row[6].(float64)
+			if vd.Views > 0 {
+				vd.Engagement = (float64(vd.Likes) + float64(vd.Comments) + vd.Shares) / float64(vd.Views) * 100
 			}
 		}
 		videos = append(videos, vd)
@@ -814,6 +836,73 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 
 		md.WriteString(fmt.Sprintf("\n**Strategy Tip**: Focus on creating more \"%s\" content as it shows the strongest performance.\n",
 			strings.ToTitle(best.Format)))
+	}
+
+	result := md.String()
+	services.Cache.Set(key, result)
+	return nil, MarkdownOutput{Content: result}, nil
+}
+
+func GetVideoCommentsHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoCommentsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
+	videoID := input.VideoID
+	maxResults := input.MaxResults
+	if maxResults == 0 {
+		maxResults = 50
+	}
+	if maxResults > 100 {
+		maxResults = 100
+	}
+
+	key := fmt.Sprintf("comments_%s_%d", videoID, maxResults)
+	if !input.ForceRefresh {
+		if cached, ok := services.Cache.Get(key); ok {
+			return nil, MarkdownOutput{Content: cached}, nil
+		}
+	}
+
+	// Get video details first
+	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet"}).Id(videoID).Do()
+	if err != nil || len(videoResp.Items) == 0 {
+		return nil, MarkdownOutput{}, fmt.Errorf("video not found")
+	}
+
+	videoTitle := videoResp.Items[0].Snippet.Title
+
+	// Get comments for the video
+	commentsResp, err := services.YoutubeService.CommentThreads.List([]string{"snippet"}).
+		VideoId(videoID).MaxResults(maxResults).
+		TextFormat("plainText").
+		Do()
+	if err != nil {
+		return nil, MarkdownOutput{}, err
+	}
+
+	var md strings.Builder
+	md.WriteString(fmt.Sprintf("# Comments for Video: %s\n\n", videoTitle))
+	md.WriteString(fmt.Sprintf("**Video ID**: `%s`\n", videoID))
+	md.WriteString(fmt.Sprintf("**Total Comments Retrieved**: %d\n\n", len(commentsResp.Items)))
+
+	if len(commentsResp.Items) == 0 {
+		md.WriteString("No comments found for this video.")
+		result := md.String()
+		services.Cache.Set(key, result)
+		return nil, MarkdownOutput{Content: result}, nil
+	}
+
+	md.WriteString("## Comments\n\n")
+
+	for i, thread := range commentsResp.Items {
+		topComment := thread.Snippet.TopLevelComment.Snippet
+		md.WriteString(fmt.Sprintf("### %d. %s\n", i+1, topComment.AuthorDisplayName))
+		md.WriteString(fmt.Sprintf("- **Likes**: %d\n", topComment.LikeCount))
+		md.WriteString(fmt.Sprintf("- **Published At**: %s\n", topComment.PublishedAt))
+		md.WriteString(fmt.Sprintf("- **Comment**: %s\n", topComment.TextDisplay))
+
+		// Include reply count if there are replies
+		if thread.Snippet.TotalReplyCount > 0 {
+			md.WriteString(fmt.Sprintf("- **Replies**: %d\n", thread.Snippet.TotalReplyCount))
+		}
+		md.WriteString("\n")
 	}
 
 	result := md.String()
