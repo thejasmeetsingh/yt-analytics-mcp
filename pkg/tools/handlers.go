@@ -85,30 +85,7 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		return nil, MarkdownOutput{}, err
 	}
 
-	var views, watchTime, likes, dislikes, comments, shares, subsGained, subsLost int64
-	var avgDuration, avgPercent, clickThroughRate, clickImpressions, thumbImpressions, thumbImpressionCtr float64
-
-	for _, row := range resp.Rows {
-		views += int64(row[1].(float64))
-		watchTime += int64(row[2].(float64))
-		likes += int64(row[3].(float64))
-		dislikes += int64(row[4].(float64))
-		comments += int64(row[5].(float64))
-		shares += int64(row[6].(float64))
-		subsGained += int64(row[7].(float64))
-		subsLost += int64(row[8].(float64))
-		avgDuration += row[9].(float64)
-		avgPercent += row[10].(float64)
-		clickThroughRate += row[11].(float64)
-		clickImpressions += row[12].(float64)
-		thumbImpressions += row[13].(float64)
-		thumbImpressionCtr += row[14].(float64)
-	}
-
-	if len(resp.Rows) > 0 {
-		avgDuration /= float64(len(resp.Rows))
-		avgPercent /= float64(len(resp.Rows))
-	}
+	data := formatAnalyticsData(resp.Rows)
 
 	md := fmt.Sprintf("# Channel Analytics (%s to %s)\n\n"+
 		"- **Views**: %s\n- **Watch Time**: %.1f hours\n- **Likes**: %s\n"+
@@ -117,12 +94,12 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n"+
 		"- **Annotation Click Through Rate %%**: %.1f%%\n- **Annotation Clickable Impressions**: %.1f%%\n"+
 		"- **Video Thumbnail Impressions %%**: %.1f%%\n- **Video Thumbnail Impressions Click Rate**: %.1f%%\n",
-		start, end, formatNumber(uint64(views)), float64(watchTime)/60,
-		formatNumber(uint64(likes)), formatNumber(uint64(comments)),
-		formatNumber(uint64(shares)), formatNumber(uint64(subsGained)),
-		formatNumber(uint64(subsLost)), formatNumber(uint64(subsGained-subsLost)),
-		avgDuration, avgPercent, float64(likes+comments+shares)/float64(views)*100,
-		clickThroughRate, clickImpressions, thumbImpressions, thumbImpressionCtr)
+		start, end, formatNumber(uint64(data["views"])), float64(data["watchTime"])/60,
+		formatNumber(uint64(data["likes"])), formatNumber(uint64(data["comments"])),
+		formatNumber(uint64(data["shares"])), formatNumber(uint64(data["subsGained"])),
+		formatNumber(uint64(data["subsLost"])), formatNumber(uint64(data["subsGained"]-data["subsLost"])),
+		data["avgDuration"], data["avgPercent"], data["engagement"],
+		data["clickThroughRate"], data["clickImpressions"], data["thumbImpressions"], data["thumbImpressionCtr"])
 
 	services.Cache.Set(key, md)
 	return nil, MarkdownOutput{Content: md}, nil
@@ -233,41 +210,8 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 		return nil, MarkdownOutput{}, err
 	}
 
-	// Calculate totals for both periods
-	calcTotals := func(rows [][]interface{}) map[string]float64 {
-		totals := map[string]float64{}
-		for _, row := range rows {
-			totals["views"] += row[1].(float64)
-			totals["watchTime"] += row[2].(float64)
-			totals["likes"] += row[3].(float64)
-			totals["dislikes"] += row[4].(float64)
-			totals["comments"] += row[4].(float64)
-			totals["shares"] += row[5].(float64)
-			totals["subsGained"] += row[6].(float64)
-			totals["subsLost"] += row[7].(float64)
-			totals["avgDuration"] += row[8].(float64)
-			totals["avgPercent"] += row[9].(float64)
-			totals["clickThroughRate"] += row[11].(float64)
-			totals["clickImpressions"] += row[12].(float64)
-			totals["thumbImpressions"] += row[13].(float64)
-			totals["thumbImpressionCtr"] += row[14].(float64)
-		}
-
-		if len(rows) > 0 {
-			totals["avgDuration"] /= float64(len(rows))
-			totals["avgPercent"] /= float64(len(rows))
-		}
-
-		totals["engagement"] = 0
-		if totals["views"] > 0 {
-			totals["engagement"] = (totals["likes"] + totals["comments"] + totals["shares"]) / totals["views"] * 100
-		}
-
-		return totals
-	}
-
-	p1 := calcTotals(resp1.Rows)
-	p2 := calcTotals(resp2.Rows)
+	p1 := formatAnalyticsData(resp1.Rows)
+	p2 := formatAnalyticsData(resp2.Rows)
 
 	calcChange := func(old, new float64) (float64, string) {
 		if old == 0 {
