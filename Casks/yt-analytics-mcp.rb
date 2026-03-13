@@ -3,7 +3,7 @@ cask "yt-analytics-mcp" do
   name "yt-analytics-mcp"
   desc "MCP server that provides comprehensive YouTube channel and video analytics using the official YouTube APIs."
   homepage "https://github.com/thejasmeetsingh/yt-analytics-mcp"
-  version "1.0.6"
+  version "1.0.7"
 
   livecheck do
     skip "Auto-generated on release."
@@ -14,22 +14,22 @@ cask "yt-analytics-mcp" do
   on_macos do
     on_intel do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Darwin_x86_64.tar.gz"
-      sha256 "fec684582de80fe1d71e8209619796dd05a9af550ce6b1a34df6e15dc96adbf0"
+      sha256 "ccb03a45bf691b448b423798233f9a534227c5c007ac3a9f920db3aa3f615b6a"
     end
     on_arm do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Darwin_arm64.tar.gz"
-      sha256 "a265e2a1952a509e36949f3d87a894ec750ccc9a32126dd377a4536817684a1c"
+      sha256 "e998866c9030fe76c2c7021c8a3376d08bb71398ebe83c438e4aefb230bfd8de"
     end
   end
 
   on_linux do
     on_intel do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Linux_x86_64.tar.gz"
-      sha256 "33b351abf7df62d69658aa6034ea8bd238b739cdd5233f389e2909f97436fb64"
+      sha256 "6ea7615fd946fd5f0a0d554cb18486389820057d334e58df773db7ec972e4767"
     end
     on_arm do
       url "https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v#{version}/yt-analytics-mcp_#{version}_Linux_arm64.tar.gz"
-      sha256 "05279732b6bce84fc56e5dd3bc536e87b5ac13c1ad746a87ea2d09d189b58083"
+      sha256 "4c2cd0b6c257ed7b2617ae860b61c12530e45832e2ebc666740126641bf0def4"
     end
   end
 
