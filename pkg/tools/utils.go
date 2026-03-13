@@ -33,16 +33,12 @@ func formatAnalyticsData(rows [][]interface{}) map[string]float64 {
 		totals["watchTime"] += row[2].(float64)
 		totals["likes"] += row[3].(float64)
 		totals["dislikes"] += row[4].(float64)
-		totals["comments"] += row[4].(float64)
-		totals["shares"] += row[5].(float64)
-		totals["subsGained"] += row[6].(float64)
-		totals["subsLost"] += row[7].(float64)
-		totals["avgDuration"] += row[8].(float64)
-		totals["avgPercent"] += row[9].(float64)
-		totals["clickThroughRate"] += row[11].(float64)
-		totals["clickImpressions"] += row[12].(float64)
-		totals["thumbImpressions"] += row[13].(float64)
-		totals["thumbImpressionCtr"] += row[14].(float64)
+		totals["comments"] += row[5].(float64)
+		totals["shares"] += row[6].(float64)
+		totals["subsGained"] += row[7].(float64)
+		totals["subsLost"] += row[8].(float64)
+		totals["avgDuration"] += row[9].(float64)
+		totals["avgPercent"] += row[10].(float64)
 	}
 
 	if len(rows) > 0 {

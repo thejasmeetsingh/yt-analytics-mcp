@@ -12,13 +12,14 @@ import (
 
 var (
 	VIDEO_METRICS = []string{
-		"views",
 		"estimatedMinutesWatched",
 		"averageViewDuration",
 		"averageViewPercentage",
-		"likes",
-		"comments",
 		"shares",
+		"annotationClickThroughRate",
+		"annotationClickableImpressions",
+		"videoThumbnailImpressions",
+		"videoThumbnailImpressionsClickRate",
 	}
 
 	CHANNEL_METRICS = []string{
@@ -32,10 +33,6 @@ var (
 		"subscribersLost",
 		"averageViewDuration",
 		"averageViewPercentage",
-		"annotationClickThroughRate",
-		"annotationClickableImpressions",
-		"videoThumbnailImpressions",
-		"videoThumbnailImpressionsClickRate",
 	}
 )
 
@@ -91,15 +88,12 @@ func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		"- **Views**: %s\n- **Watch Time**: %.1f hours\n- **Likes**: %s\n"+
 		"- **Comments**: %s\n- **Shares**: %s\n- **Subs Gained**: %s\n"+
 		"- **Subs Lost**: %s\n- **Net Subs**: %s\n- **Avg Duration**: %.0fs\n"+
-		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n"+
-		"- **Annotation Click Through Rate %%**: %.1f%%\n- **Annotation Clickable Impressions**: %.1f%%\n"+
-		"- **Video Thumbnail Impressions %%**: %.1f%%\n- **Video Thumbnail Impressions Click Rate**: %.1f%%\n",
+		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n",
 		start, end, formatNumber(uint64(data["views"])), float64(data["watchTime"])/60,
 		formatNumber(uint64(data["likes"])), formatNumber(uint64(data["comments"])),
 		formatNumber(uint64(data["shares"])), formatNumber(uint64(data["subsGained"])),
 		formatNumber(uint64(data["subsLost"])), formatNumber(uint64(data["subsGained"]-data["subsLost"])),
-		data["avgDuration"], data["avgPercent"], data["engagement"],
-		data["clickThroughRate"], data["clickImpressions"], data["thumbImpressions"], data["thumbImpressionCtr"])
+		data["avgDuration"], data["avgPercent"], data["engagement"])
 
 	services.Cache.Set(key, md)
 	return nil, MarkdownOutput{Content: md}, nil
@@ -270,10 +264,6 @@ func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest,
 	addRow("Avg View Duration", p1["avgDuration"], p2["avgDuration"], false, false)
 	addRow("Avg View %", p1["avgPercent"], p2["avgPercent"], false, true)
 	addRow("Engagement Rate", p1["engagement"], p2["engagement"], false, true)
-	addRow("Annotation Click Through Rate", p1["clickThroughRate"], p2["clickThroughRate"], false, false)
-	addRow("Annotation Clickable Impressions", p1["clickImpressions"], p2["clickImpressions"], false, false)
-	addRow("Video Thumbnail Impressions", p1["thumbImpressions"], p2["thumbImpressions"], false, false)
-	addRow("Video Thumbnail Impressions Click Rate", p1["thumbImpressionCtr"], p2["thumbImpressionCtr"], false, false)
 
 	md.WriteString("\n## Key Insights\n\n")
 	insights := []string{}
@@ -337,16 +327,21 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 	}
 
 	type VideoData struct {
-		Title       string
-		ID          string
-		Views       uint64
-		Likes       uint64
-		Comments    uint64
-		WatchTime   float64
-		AvgDuration float64
-		AvgPercent  float64
-		Shares      float64
-		Engagement  float64
+		Title                          string
+		ID                             string
+		Views                          uint64
+		Likes                          uint64
+		Dislikes                       uint64
+		Comments                       uint64
+		WatchTime                      float64
+		AvgDuration                    float64
+		AvgPercent                     float64
+		Shares                         float64
+		Engagement                     float64
+		AnonClickThroughRate           float64
+		AnonClickImpressions           float64
+		VideoThumbImpresssions         float64
+		VideoThumbImpressionsClickRate float64
 	}
 
 	videos := []VideoData{}
@@ -356,6 +351,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 			ID:       video.Id,
 			Views:    video.Statistics.ViewCount,
 			Likes:    video.Statistics.LikeCount,
+			Dislikes: video.Statistics.DislikeCount,
 			Comments: video.Statistics.CommentCount,
 		}
 
@@ -367,10 +363,15 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 
 		if err == nil && len(analyticsResp.Rows) > 0 {
 			row := analyticsResp.Rows[0]
-			vd.WatchTime = row[1].(float64)
-			vd.AvgDuration = row[2].(float64)
-			vd.AvgPercent = row[3].(float64)
-			vd.Shares = row[6].(float64)
+			vd.WatchTime = row[0].(float64)
+			vd.AvgDuration = row[1].(float64)
+			vd.AvgPercent = row[2].(float64)
+			vd.Shares = row[3].(float64)
+			vd.AnonClickThroughRate = row[4].(float64)
+			vd.AnonClickImpressions = row[5].(float64)
+			vd.VideoThumbImpresssions = row[6].(float64)
+			vd.VideoThumbImpressionsClickRate = row[7].(float64)
+
 			if vd.Views > 0 {
 				vd.Engagement = (float64(vd.Likes) + float64(vd.Comments) + vd.Shares) / float64(vd.Views) * 100
 			}
@@ -402,11 +403,16 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 		md.WriteString(fmt.Sprintf("- **Video ID**: `%s`\n", v.ID))
 		md.WriteString(fmt.Sprintf("- **Views**: %s\n", formatNumber(v.Views)))
 		md.WriteString(fmt.Sprintf("- **Likes**: %s\n", formatNumber(v.Likes)))
+		md.WriteString(fmt.Sprintf("- **Dislikes**: %s\n", formatNumber(v.Dislikes)))
 		md.WriteString(fmt.Sprintf("- **Comments**: %s\n", formatNumber(v.Comments)))
 		md.WriteString(fmt.Sprintf("- **Watch Time**: %.1f hours\n", v.WatchTime/60))
 		md.WriteString(fmt.Sprintf("- **Avg Duration**: %.0f seconds\n", v.AvgDuration))
 		md.WriteString(fmt.Sprintf("- **Avg View %%**: %.1f%%\n", v.AvgPercent))
 		md.WriteString(fmt.Sprintf("- **Engagement Rate**: %.2f%%\n\n", v.Engagement))
+		md.WriteString(fmt.Sprintf("- **Annotation Click Through Rate**: %.2f%%\n\n", v.AnonClickThroughRate))
+		md.WriteString(fmt.Sprintf("- **Annotation Clickable Impressions**: %.2f%%\n\n", v.AnonClickImpressions))
+		md.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions**: %.2f%%\n\n", v.VideoThumbImpresssions))
+		md.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions Click Rate**: %.2f%%\n\n", v.VideoThumbImpressionsClickRate))
 	}
 
 	// Find best performers
