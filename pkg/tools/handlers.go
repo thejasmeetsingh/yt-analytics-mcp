@@ -11,488 +11,606 @@ import (
 )
 
 var (
-	VIDEO_METRICS = []string{
-		"estimatedMinutesWatched",
-		"averageViewDuration",
-		"averageViewPercentage",
-		"shares",
-		"annotationClickThroughRate",
-		"annotationClickableImpressions",
-		"videoThumbnailImpressions",
-		"videoThumbnailImpressionsClickRate",
+	videoMetrics = []string{
+		"estimatedMinutesWatched",            // Total minutes watched during the period.
+		"averageViewDuration",                // Average seconds a viewer watched per session.
+		"averageViewPercentage",              // Percentage of the video watched on average.
+		"shares",                             // Number of times the video was shared.
+		"annotationClickThroughRate",         // CTR on interactive video annotations.
+		"annotationClickableImpressions",     // Total impressions on clickable annotations.
+		"videoThumbnailImpressions",          // Number of times the thumbnail was shown.
+		"videoThumbnailImpressionsClickRate", // Click-through rate on the thumbnail.
 	}
 
-	CHANNEL_METRICS = []string{
-		"views",
-		"estimatedMinutesWatched",
-		"likes",
-		"dislikes",
-		"comments",
-		"shares",
-		"subscribersGained",
-		"subscribersLost",
-		"averageViewDuration",
-		"averageViewPercentage",
+	channelMetrics = []string{
+		"views",                   // Total number of video views.
+		"estimatedMinutesWatched", // Total watch time across all videos.
+		"likes",                   // Total likes received.
+		"dislikes",                // Total dislikes received.
+		"comments",                // Total comments posted.
+		"shares",                  // Total shares across videos.
+		"subscribersGained",       // New subscribers added in the period.
+		"subscribersLost",         // Subscribers who unsubscribed in the period.
+		"averageViewDuration",     // Average seconds watched per view.
+		"averageViewPercentage",   // Average percentage of videos watched.
 	}
 )
 
+// ListChannelsHandler returns a Markdown summary of all YouTube channels owned by the user.
 func ListChannelsHandler(ctx context.Context, req *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	key := "channels_list"
-	if cached, ok := services.Cache.Get(key); ok {
+	const cacheKey = "channels_list"
+
+	// Return cached result if available — avoids an unnecessary API round-trip.
+	if cached, ok := services.Cache.Get(cacheKey); ok {
 		return nil, MarkdownOutput{Content: cached}, nil
 	}
 
+	// Fetch channel metadata and statistics for the authenticated user's channels.
 	resp, err := services.YoutubeService.Channels.List([]string{"snippet", "statistics"}).Mine(true).Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	var md strings.Builder
-	md.WriteString("# Your YouTube Channels\n\n")
+	var b strings.Builder
+	b.WriteString("# Your YouTube Channels\n\n")
+
 	for i, ch := range resp.Items {
-		md.WriteString(fmt.Sprintf("## %d. %s\n\n", i+1, ch.Snippet.Title))
-		md.WriteString(fmt.Sprintf("- **Channel ID**: `%s`\n", ch.Id))
-		md.WriteString(fmt.Sprintf("- **Subscribers**: %s\n", formatNumber(ch.Statistics.SubscriberCount)))
-		md.WriteString(fmt.Sprintf("- **Total Videos**: %s\n", formatNumber(ch.Statistics.VideoCount)))
-		md.WriteString(fmt.Sprintf("- **Total Views**: %s\n\n", formatNumber(ch.Statistics.ViewCount)))
+		// Write a numbered section for each channel with key stats.
+		b.WriteString(fmt.Sprintf("## %d. %s\n\n", i+1, ch.Snippet.Title))
+		b.WriteString(fmt.Sprintf("- **Channel ID**: `%s`\n", ch.Id))
+		b.WriteString(fmt.Sprintf("- **Subscribers**: %s\n", formatNumber(ch.Statistics.SubscriberCount)))
+		b.WriteString(fmt.Sprintf("- **Total Videos**: %s\n", formatNumber(ch.Statistics.VideoCount)))
+		b.WriteString(fmt.Sprintf("- **Total Views**: %s\n\n", formatNumber(ch.Statistics.ViewCount)))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
-func GetChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input ChannelAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	start := getDateOrDefault(input.StartDate, -30)
-	end := getDateOrDefault(input.EndDate, 0)
+// ChannelAnalyticsHandler returns aggregated analytics for a given channel over
+// a specified date range (defaults to the last 30 days if not provided).
+func ChannelAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input ChannelAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
+	// Resolve dates, falling back to sensible defaults when not supplied.
+	startDate := getDateOrDefault(input.StartDate, -30) // Default: 30 days ago.
+	endDate := getDateOrDefault(input.EndDate, 0)       // Default: today.
 
-	key := fmt.Sprintf("analytics_%s_%s_%s", input.ChannelID, start, end)
+	cacheKey := fmt.Sprintf("analytics_%s_%s_%s", input.ChannelID, startDate, endDate)
+
+	// Honour the cache unless the caller explicitly requests a fresh fetch.
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	metrics := strings.Join(CHANNEL_METRICS, ",")
+	metrics := strings.Join(channelMetrics, ",")
 
+	// Query the Analytics API for daily-dimension data across all channel metrics.
 	resp, err := services.AnalyticsService.Reports.Query().
-		Ids("channel==" + input.ChannelID).StartDate(start).EndDate(end).
-		Metrics(metrics).Dimensions("day").Do()
+		Ids("channel==" + input.ChannelID).
+		StartDate(startDate).
+		EndDate(endDate).
+		Metrics(metrics).
+		Dimensions("day").
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
+	// Aggregate raw rows into a flat map of named metric totals/averages.
 	data := formatAnalyticsData(resp.Rows)
 
-	md := fmt.Sprintf("# Channel Analytics (%s to %s)\n\n"+
-		"- **Views**: %s\n- **Watch Time**: %.1f hours\n- **Likes**: %s\n"+
-		"- **Comments**: %s\n- **Shares**: %s\n- **Subs Gained**: %s\n"+
-		"- **Subs Lost**: %s\n- **Net Subs**: %s\n- **Avg Duration**: %.0fs\n"+
-		"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n",
-		start, end, formatNumber(uint64(data["views"])), float64(data["watchTime"])/60,
-		formatNumber(uint64(data["likes"])), formatNumber(uint64(data["comments"])),
-		formatNumber(uint64(data["shares"])), formatNumber(uint64(data["subsGained"])),
-		formatNumber(uint64(data["subsLost"])), formatNumber(uint64(data["subsGained"]-data["subsLost"])),
-		data["avgDuration"], data["avgPercent"], data["engagement"])
+	// Build the Markdown summary using pre-computed aggregate values.
+	out := fmt.Sprintf(
+		"# Channel Analytics (%s to %s)\n\n"+
+			"- **Views**: %s\n- **Watch Time**: %.1f hours\n- **Likes**: %s\n"+
+			"- **Comments**: %s\n- **Shares**: %s\n- **Subs Gained**: %s\n"+
+			"- **Subs Lost**: %s\n- **Net Subs**: %s\n- **Avg Duration**: %.0fs\n"+
+			"- **Avg View %%**: %.1f%%\n- **Engagement Rate**: %.2f%%\n",
+		startDate, endDate,
+		formatNumber(uint64(data["views"])),
+		data["watchTime"]/60, // Convert minutes to hours.
+		formatNumber(uint64(data["likes"])),
+		formatNumber(uint64(data["comments"])),
+		formatNumber(uint64(data["shares"])),
+		formatNumber(uint64(data["subsGained"])),
+		formatNumber(uint64(data["subsLost"])),
+		formatNumber(uint64(data["subsGained"]-data["subsLost"])), // Net subscriber change.
+		data["avgDuration"],
+		data["avgPercent"],
+		data["engagement"],
+	)
 
-	services.Cache.Set(key, md)
-	return nil, MarkdownOutput{Content: md}, nil
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
-func GetVideoListHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoListInput) (*mcp.CallToolResult, MarkdownOutput, error) {
+// VideoListHandler lists the most recent videos uploaded to the specified channel.
+// maxResults defaults to 50 when not provided. The list is fetched via the channel's
+// uploads playlist for efficiency.
+func VideoListHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoListInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	maxResults := input.MaxResults
 	if maxResults == 0 {
-		maxResults = 50
+		maxResults = 50 // Sensible default — keeps API costs low while still useful.
 	}
 
-	key := fmt.Sprintf("videos_%s_%d", input.ChannelID, maxResults)
+	cacheKey := fmt.Sprintf("videos_%s_%d", input.ChannelID, maxResults)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
+	// Resolve the uploads playlist ID for the channel.
 	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(input.ChannelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
-	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+	// The uploads playlist contains all publicly published videos for the channel.
+	uploadsPlaylistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+
 	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
-		PlaylistId(playlistID).MaxResults(maxResults).Do()
+		PlaylistId(uploadsPlaylistID).
+		MaxResults(maxResults).
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# Videos (%d)\n\n", len(resp.Items)))
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("# Videos (%d)\n\n", len(resp.Items)))
+
 	for i, item := range resp.Items {
-		md.WriteString(fmt.Sprintf("## %d. %s\n- **ID**: `%s`\n- **Description**: %s\n- **Published**: %s\n\n",
-			i+1, item.Snippet.Title, item.ContentDetails.VideoId, item.Snippet.Description, item.ContentDetails.VideoPublishedAt))
+		b.WriteString(fmt.Sprintf(
+			"## %d. %s\n- **ID**: `%s`\n- **Description**: %s\n- **Published**: %s\n\n",
+			i+1,
+			item.Snippet.Title,
+			item.ContentDetails.VideoId,
+			item.Snippet.Description,
+			item.ContentDetails.VideoPublishedAt,
+		))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
-func GetVideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	key := fmt.Sprintf("video_analytics_%s", input.VideoIDs)
+// VideoAnalyticsHandler returns public statistics (views, likes, comments) for one
+// or more videos identified by a comma-separated list of video IDs.
+func VideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoAnalyticsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
+	cacheKey := fmt.Sprintf("video_analytics_%s", input.VideoIDs)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
+	// Parse and trim the comma-separated video ID list supplied by the caller.
 	ids := strings.Split(input.VideoIDs, ",")
 	for i := range ids {
 		ids[i] = strings.TrimSpace(ids[i])
 	}
 
+	// Batch-fetch snippet and statistics for all video IDs in a single API call.
 	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics"}).
-		Id(strings.Join(ids, ",")).Do()
+		Id(strings.Join(ids, ",")).
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	var md strings.Builder
-	md.WriteString("# Video Analytics\n\n")
-	for _, video := range videoResp.Items {
-		md.WriteString(fmt.Sprintf("## %s\n\n- **ID**: `%s`\n- **Views**: %s\n- **Likes**: %s\n- **Comments**: %s\n\n",
-			video.Snippet.Title, video.Id, formatNumber(video.Statistics.ViewCount),
-			formatNumber(video.Statistics.LikeCount), formatNumber(video.Statistics.CommentCount)))
+	var b strings.Builder
+	b.WriteString("# Video Analytics\n\n")
+
+	for _, v := range videoResp.Items {
+		b.WriteString(fmt.Sprintf(
+			"## %s\n\n- **ID**: `%s`\n- **Views**: %s\n- **Likes**: %s\n- **Comments**: %s\n\n",
+			v.Snippet.Title,
+			v.Id,
+			formatNumber(v.Statistics.ViewCount),
+			formatNumber(v.Statistics.LikeCount),
+			formatNumber(v.Statistics.CommentCount),
+		))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
+// CompareChannelPeriodsHandler compares channel-level analytics between two arbitrary
+// date ranges and surfaces percentage changes with directional arrows. It also generates
+// brief narrative insights based on threshold-driven rules for views, engagement, and
+// audience retention.
 func CompareChannelPeriodsHandler(ctx context.Context, req *mcp.CallToolRequest, input ComparePeriodsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	channelID := input.ChannelID
 
+	// Resolve both period boundaries, defaulting each end to today and start to 30 days ago.
 	p1Start := getDateOrDefault(input.Period1Start, -30)
 	p1End := getDateOrDefault(input.Period1End, 0)
 	p2Start := getDateOrDefault(input.Period2Start, -30)
 	p2End := getDateOrDefault(input.Period2End, 0)
 
-	key := fmt.Sprintf("compare_periods_%s_%s_%s_%s_%s", channelID, p1Start, p1End, p2Start, p2End)
+	cacheKey := fmt.Sprintf("compare_periods_%s_%s_%s_%s_%s", channelID, p1Start, p1End, p2Start, p2End)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	metrics := strings.Join(CHANNEL_METRICS, ",")
+	metrics := strings.Join(channelMetrics, ",")
 
-	// Get period 1 data
+	// Fetch analytics for Period 1.
 	resp1, err := services.AnalyticsService.Reports.Query().
-		Ids("channel==" + channelID).StartDate(p1Start).EndDate(p1End).
-		Metrics(metrics).Dimensions("day").Do()
+		Ids("channel==" + channelID).
+		StartDate(p1Start).
+		EndDate(p1End).
+		Metrics(metrics).
+		Dimensions("day").
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	// Get period 2 data
+	// Fetch analytics for Period 2.
 	resp2, err := services.AnalyticsService.Reports.Query().
-		Ids("channel==" + channelID).StartDate(p2Start).EndDate(p2End).
-		Metrics(metrics).Dimensions("day").Do()
+		Ids("channel==" + channelID).
+		StartDate(p2Start).
+		EndDate(p2End).
+		Metrics(metrics).
+		Dimensions("day").
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	p1 := formatAnalyticsData(resp1.Rows)
-	p2 := formatAnalyticsData(resp2.Rows)
+	p1Data := formatAnalyticsData(resp1.Rows)
+	p2Data := formatAnalyticsData(resp2.Rows)
 
-	calcChange := func(old, new float64) (float64, string) {
-		if old == 0 {
+	// calcPercentChange computes the percentage change from oldVal to newVal and
+	// returns a directional arrow emoji. Returns (0, "N/A") when oldVal is zero to
+	// avoid a divide-by-zero error.
+	calcPercentChange := func(oldVal, newVal float64) (float64, string) {
+		if oldVal == 0 {
 			return 0, "N/A"
 		}
-		change := ((new - old) / old) * 100
-		arrow := "→"
-		if change > 0 {
-			arrow = "↗️"
-		} else if change < 0 {
-			arrow = "↘️"
+		pct := ((newVal - oldVal) / oldVal) * 100
+		arrow := "→" // Neutral — negligible change.
+		if pct > 0 {
+			arrow = "↗️" // Positive trend.
+		} else if pct < 0 {
+			arrow = "↘️" // Negative trend.
 		}
-		return change, arrow
+		return pct, arrow
 	}
 
-	var md strings.Builder
-	md.WriteString("# Channel Period Comparison\n\n")
-	md.WriteString(fmt.Sprintf("**Period 1**: %s to %s\n", p1Start, p1End))
-	md.WriteString(fmt.Sprintf("**Period 2**: %s to %s\n\n", p2Start, p2End))
+	var b strings.Builder
+	b.WriteString("# Channel Period Comparison\n\n")
+	b.WriteString(fmt.Sprintf("**Period 1**: %s to %s\n", p1Start, p1End))
+	b.WriteString(fmt.Sprintf("**Period 2**: %s to %s\n\n", p2Start, p2End))
 
-	md.WriteString("## Performance Comparison\n\n")
-	md.WriteString("| Metric | Period 1 | Period 2 | Change | % Change |\n")
-	md.WriteString("|--------|----------|----------|--------|----------|\n")
+	b.WriteString("## Performance Comparison\n\n")
+	b.WriteString("| Metric | Period 1 | Period 2 | Change | % Change |\n")
+	b.WriteString("|--------|----------|----------|--------|----------|\n")
 
-	addRow := func(name string, val1, val2 float64, isTime, isPercent bool) {
-		var v1Str, v2Str, changeStr string
-		if isTime {
-			v1Str = fmt.Sprintf("%.1f hrs", val1/60)
-			v2Str = fmt.Sprintf("%.1f hrs", val2/60)
-			changeStr = fmt.Sprintf("%+.1f hrs", (val2-val1)/60)
-		} else if isPercent {
-			v1Str = fmt.Sprintf("%.1f%%", val1)
-			v2Str = fmt.Sprintf("%.1f%%", val2)
-			changeStr = fmt.Sprintf("%+.1f%%", val2-val1)
-		} else {
-			v1Str = formatNumber(uint64(val1))
-			v2Str = formatNumber(uint64(val2))
-			changeStr = fmt.Sprintf("%+s", formatNumber(uint64(val2-val1)))
+	// writeRow formats and appends a single comparison table row to b.
+	// Set isTime=true to render values as hours; set isPercent=true for % suffix.
+	writeRow := func(label string, val1, val2 float64, isTime, isPercent bool) {
+		var s1, s2, delta string
+
+		switch {
+		case isTime:
+			s1 = fmt.Sprintf("%.1f hrs", val1/60)
+			s2 = fmt.Sprintf("%.1f hrs", val2/60)
+			delta = fmt.Sprintf("%+.1f hrs", (val2-val1)/60)
+		case isPercent:
+			s1 = fmt.Sprintf("%.1f%%", val1)
+			s2 = fmt.Sprintf("%.1f%%", val2)
+			delta = fmt.Sprintf("%+.1f%%", val2-val1)
+		default:
+			s1 = formatNumber(uint64(val1))
+			s2 = formatNumber(uint64(val2))
+			delta = fmt.Sprintf("%+s", formatNumber(uint64(val2-val1)))
 		}
-		pctChange, arrow := calcChange(val1, val2)
-		md.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %.1f%% %s |\n",
-			name, v1Str, v2Str, changeStr, pctChange, arrow))
+
+		pctChange, arrow := calcPercentChange(val1, val2)
+		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %.1f%% %s |\n",
+			label, s1, s2, delta, pctChange, arrow))
 	}
 
-	addRow("Views", p1["views"], p2["views"], false, false)
-	addRow("Watch Time", p1["watchTime"], p2["watchTime"], true, false)
-	addRow("Likes", p1["likes"], p2["likes"], false, false)
-	addRow("Dislikes", p1["dislikes"], p2["dislikes"], false, false)
-	addRow("Comments", p1["comments"], p2["comments"], false, false)
-	addRow("Shares", p1["shares"], p2["shares"], false, false)
-	addRow("Subs Gained", p1["subsGained"], p2["subsGained"], false, false)
-	addRow("Subs Lost", p1["subsLost"], p2["subsLost"], false, false)
-	netSubs1 := p1["subsGained"] - p1["subsLost"]
-	netSubs2 := p2["subsGained"] - p2["subsLost"]
-	addRow("Net Subscribers", netSubs1, netSubs2, false, false)
-	addRow("Avg View Duration", p1["avgDuration"], p2["avgDuration"], false, false)
-	addRow("Avg View %", p1["avgPercent"], p2["avgPercent"], false, true)
-	addRow("Engagement Rate", p1["engagement"], p2["engagement"], false, true)
+	// Write one row per tracked metric.
+	writeRow("Views", p1Data["views"], p2Data["views"], false, false)
+	writeRow("Watch Time", p1Data["watchTime"], p2Data["watchTime"], true, false)
+	writeRow("Likes", p1Data["likes"], p2Data["likes"], false, false)
+	writeRow("Dislikes", p1Data["dislikes"], p2Data["dislikes"], false, false)
+	writeRow("Comments", p1Data["comments"], p2Data["comments"], false, false)
+	writeRow("Shares", p1Data["shares"], p2Data["shares"], false, false)
+	writeRow("Subs Gained", p1Data["subsGained"], p2Data["subsGained"], false, false)
+	writeRow("Subs Lost", p1Data["subsLost"], p2Data["subsLost"], false, false)
 
-	md.WriteString("\n## Key Insights\n\n")
-	insights := []string{}
+	// Net subscribers = gained − lost for each period.
+	netSubs1 := p1Data["subsGained"] - p1Data["subsLost"]
+	netSubs2 := p2Data["subsGained"] - p2Data["subsLost"]
+	writeRow("Net Subscribers", netSubs1, netSubs2, false, false)
 
-	viewChange, _ := calcChange(p1["views"], p2["views"])
-	if viewChange > 10 {
+	writeRow("Avg View Duration", p1Data["avgDuration"], p2Data["avgDuration"], false, false)
+	writeRow("Avg View %", p1Data["avgPercent"], p2Data["avgPercent"], false, true)
+	writeRow("Engagement Rate", p1Data["engagement"], p2Data["engagement"], false, true)
+
+	// Generate plain-English insights based on configurable thresholds.
+	b.WriteString("\n## Key Insights\n\n")
+	var insights []string
+
+	// Views: flag significant growth or decline (>10% threshold).
+	viewChange, _ := calcPercentChange(p1Data["views"], p2Data["views"])
+	switch {
+	case viewChange > 10:
 		insights = append(insights, fmt.Sprintf("✅ **Strong view growth** of %.1f%% in period 2", viewChange))
-	} else if viewChange < -10 {
+	case viewChange < -10:
 		insights = append(insights, fmt.Sprintf("⚠️ **Views declined** by %.1f%% - investigate content strategy", -viewChange))
 	}
 
-	engChange, _ := calcChange(p1["engagement"], p2["engagement"])
-	if engChange > 5 {
+	// Engagement: flag meaningful shifts in interaction rate (>5% threshold).
+	engChange, _ := calcPercentChange(p1Data["engagement"], p2Data["engagement"])
+	switch {
+	case engChange > 5:
 		insights = append(insights, fmt.Sprintf("✅ **Engagement improved** by %.1f%% - audience is more interactive", engChange))
-	} else if engChange < -5 {
+	case engChange < -5:
 		insights = append(insights, fmt.Sprintf("⚠️ **Engagement dropped** by %.1f%% - content may need adjustment", -engChange))
 	}
 
-	retentionChange, _ := calcChange(p1["avgPercent"], p2["avgPercent"])
-	if retentionChange > 5 {
+	// Retention: flag changes in how much of each video viewers watch (>5% threshold).
+	retentionChange, _ := calcPercentChange(p1Data["avgPercent"], p2Data["avgPercent"])
+	switch {
+	case retentionChange > 5:
 		insights = append(insights, "✅ **Better audience retention** - viewers watching more of each video")
-	} else if retentionChange < -5 {
+	case retentionChange < -5:
 		insights = append(insights, "⚠️ **Lower retention** - viewers leaving videos earlier")
 	}
 
+	// Provide a neutral fallback when no threshold was breached.
 	if len(insights) == 0 {
 		insights = append(insights, "📊 Performance is relatively stable between periods")
 	}
 
 	for _, insight := range insights {
-		md.WriteString(fmt.Sprintf("- %s\n", insight))
+		b.WriteString(fmt.Sprintf("- %s\n", insight))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
+// CompareVideosHandler compares performance metrics side-by-side for two or more
+// videos supplied as a comma-separated list of video IDs. It fetches both public
+// statistics and owner-level analytics (watch time, retention, etc.) and highlights
+// the top performer in each key category.
 func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input CompareVideosInput) (*mcp.CallToolResult, MarkdownOutput, error) {
-	videoIDs := input.VideoIDs
+	startDate := getDateOrDefault(input.StartDate, -30)
+	endDate := getDateOrDefault(input.EndDate, 0)
 
-	start := getDateOrDefault(input.StartDate, -30)
-	end := getDateOrDefault(input.EndDate, 0)
-
-	key := fmt.Sprintf("compare_videos_%s_%s_%s", videoIDs, start, end)
+	cacheKey := fmt.Sprintf("compare_videos_%s_%s_%s", input.VideoIDs, startDate, endDate)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	ids := strings.Split(videoIDs, ",")
+	// Trim whitespace from each individual video ID in the comma-separated list.
+	ids := strings.Split(input.VideoIDs, ",")
 	for i := range ids {
 		ids[i] = strings.TrimSpace(ids[i])
 	}
 
+	// Batch-fetch metadata for all requested videos in a single API call.
 	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
-		Id(strings.Join(ids, ",")).Do()
+		Id(strings.Join(ids, ",")).
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	type VideoData struct {
-		Title                          string
-		ID                             string
-		Views                          uint64
-		Likes                          uint64
-		Dislikes                       uint64
-		Comments                       uint64
-		WatchTime                      float64
-		AvgDuration                    float64
-		AvgPercent                     float64
-		Shares                         float64
-		Engagement                     float64
-		AnonClickThroughRate           float64
-		AnonClickImpressions           float64
-		VideoThumbImpresssions         float64
-		VideoThumbImpressionsClickRate float64
+	type videoStats struct {
+		title                   string
+		id                      string
+		views                   uint64
+		likes                   uint64
+		dislikes                uint64
+		comments                uint64
+		watchTimeMinutes        float64 // Minutes watched during the analysis period.
+		avgDurationSecs         float64 // Average seconds watched per view.
+		avgViewPercent          float64 // Percentage of the video watched on average.
+		shares                  float64
+		engagementRate          float64 // (likes + comments + shares) / views * 100.
+		annotationCTR           float64 // Annotation click-through rate.
+		annotationImpressions   float64 // Clickable annotation impression count.
+		thumbnailImpressions    float64 // Thumbnail impression count.
+		thumbnailImpressionsCTR float64 // Thumbnail click-through rate.
 	}
 
-	videos := []VideoData{}
-	for _, video := range videoResp.Items {
-		vd := VideoData{
-			Title:    video.Snippet.Title,
-			ID:       video.Id,
-			Views:    video.Statistics.ViewCount,
-			Likes:    video.Statistics.LikeCount,
-			Dislikes: video.Statistics.DislikeCount,
-			Comments: video.Statistics.CommentCount,
+	var videos []videoStats
+
+	for _, v := range videoResp.Items {
+		vs := videoStats{
+			title:    v.Snippet.Title,
+			id:       v.Id,
+			views:    v.Statistics.ViewCount,
+			likes:    v.Statistics.LikeCount,
+			dislikes: v.Statistics.DislikeCount,
+			comments: v.Statistics.CommentCount,
 		}
 
-		metrics := strings.Join(VIDEO_METRICS, ",")
+		metrics := strings.Join(videoMetrics, ",")
 
+		// Enrich with owner-level analytics for the specified date range.
 		analyticsResp, err := services.AnalyticsService.Reports.Query().
-			Ids("channel==MINE").StartDate(start).EndDate(end).
-			Metrics(metrics).Filters("video==" + video.Id).Do()
+			Ids("channel==MINE").
+			StartDate(startDate).
+			EndDate(endDate).
+			Metrics(metrics).
+			Filters("video==" + v.Id).
+			Do()
 
+		// Populate analytics fields only when the API call succeeds and returns rows.
 		if err == nil && len(analyticsResp.Rows) > 0 {
 			row := analyticsResp.Rows[0]
-			vd.WatchTime = row[0].(float64)
-			vd.AvgDuration = row[1].(float64)
-			vd.AvgPercent = row[2].(float64)
-			vd.Shares = row[3].(float64)
-			vd.AnonClickThroughRate = row[4].(float64)
-			vd.AnonClickImpressions = row[5].(float64)
-			vd.VideoThumbImpresssions = row[6].(float64)
-			vd.VideoThumbImpressionsClickRate = row[7].(float64)
+			vs.watchTimeMinutes = row[0].(float64)
+			vs.avgDurationSecs = row[1].(float64)
+			vs.avgViewPercent = row[2].(float64)
+			vs.shares = row[3].(float64)
+			vs.annotationCTR = row[4].(float64)
+			vs.annotationImpressions = row[5].(float64)
+			vs.thumbnailImpressions = row[6].(float64)
+			vs.thumbnailImpressionsCTR = row[7].(float64)
 
-			if vd.Views > 0 {
-				vd.Engagement = (float64(vd.Likes) + float64(vd.Comments) + vd.Shares) / float64(vd.Views) * 100
+			// Engagement rate: normalised interactions as a percentage of total views.
+			if vs.views > 0 {
+				vs.engagementRate = (float64(vs.likes) + float64(vs.comments) + vs.shares) / float64(vs.views) * 100
 			}
 		}
-		videos = append(videos, vd)
+
+		videos = append(videos, vs)
 	}
 
-	var md strings.Builder
-	md.WriteString("# Video Performance Comparison\n\n")
-	md.WriteString(fmt.Sprintf("**Period**: %s to %s\n", start, end))
-	md.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n\n", len(videos)))
+	var b strings.Builder
+	b.WriteString("# Video Performance Comparison\n\n")
+	b.WriteString(fmt.Sprintf("**Period**: %s to %s\n", startDate, endDate))
+	b.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n\n", len(videos)))
 
-	md.WriteString("## Performance Overview\n\n")
-	md.WriteString("| Video | Views | Watch Time | Avg Duration | Avg View % | Engagement |\n")
-	md.WriteString("|-------|-------|------------|--------------|------------|------------|\n")
+	// Summary table: one row per video with key metrics only.
+	b.WriteString("## Performance Overview\n\n")
+	b.WriteString("| Video | Views | Watch Time | Avg Duration | Avg View % | Engagement |\n")
+	b.WriteString("|-------|-------|------------|--------------|------------|------------|\n")
 
-	for _, v := range videos {
-		title := v.Title
+	for _, vs := range videos {
+		title := vs.title
+		// Truncate long titles to keep the Markdown table readable.
 		if len(title) > 40 {
 			title = title[:37] + "..."
 		}
-		md.WriteString(fmt.Sprintf("| %s | %s | %.1f hrs | %.0fs | %.1f%% | %.2f%% |\n",
-			title, formatNumber(v.Views), v.WatchTime/60, v.AvgDuration, v.AvgPercent, v.Engagement))
+		b.WriteString(fmt.Sprintf("| %s | %s | %.1f hrs | %.0fs | %.1f%% | %.2f%% |\n",
+			title,
+			formatNumber(vs.views),
+			vs.watchTimeMinutes/60, // Convert minutes to hours.
+			vs.avgDurationSecs,
+			vs.avgViewPercent,
+			vs.engagementRate,
+		))
 	}
 
-	md.WriteString("\n## Detailed Metrics\n\n")
-	for i, v := range videos {
-		md.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, v.Title))
-		md.WriteString(fmt.Sprintf("- **Video ID**: `%s`\n", v.ID))
-		md.WriteString(fmt.Sprintf("- **Views**: %s\n", formatNumber(v.Views)))
-		md.WriteString(fmt.Sprintf("- **Likes**: %s\n", formatNumber(v.Likes)))
-		md.WriteString(fmt.Sprintf("- **Dislikes**: %s\n", formatNumber(v.Dislikes)))
-		md.WriteString(fmt.Sprintf("- **Comments**: %s\n", formatNumber(v.Comments)))
-		md.WriteString(fmt.Sprintf("- **Watch Time**: %.1f hours\n", v.WatchTime/60))
-		md.WriteString(fmt.Sprintf("- **Avg Duration**: %.0f seconds\n", v.AvgDuration))
-		md.WriteString(fmt.Sprintf("- **Avg View %%**: %.1f%%\n", v.AvgPercent))
-		md.WriteString(fmt.Sprintf("- **Engagement Rate**: %.2f%%\n\n", v.Engagement))
-		md.WriteString(fmt.Sprintf("- **Annotation Click Through Rate**: %.2f%%\n\n", v.AnonClickThroughRate))
-		md.WriteString(fmt.Sprintf("- **Annotation Clickable Impressions**: %.2f%%\n\n", v.AnonClickImpressions))
-		md.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions**: %.2f%%\n\n", v.VideoThumbImpresssions))
-		md.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions Click Rate**: %.2f%%\n\n", v.VideoThumbImpressionsClickRate))
+	// Detailed section: full metrics breakdown per video.
+	b.WriteString("\n## Detailed Metrics\n\n")
+	for i, vs := range videos {
+		b.WriteString(fmt.Sprintf("### %d. %s\n\n", i+1, vs.title))
+		b.WriteString(fmt.Sprintf("- **Video ID**: `%s`\n", vs.id))
+		b.WriteString(fmt.Sprintf("- **Views**: %s\n", formatNumber(vs.views)))
+		b.WriteString(fmt.Sprintf("- **Likes**: %s\n", formatNumber(vs.likes)))
+		b.WriteString(fmt.Sprintf("- **Dislikes**: %s\n", formatNumber(vs.dislikes)))
+		b.WriteString(fmt.Sprintf("- **Comments**: %s\n", formatNumber(vs.comments)))
+		b.WriteString(fmt.Sprintf("- **Watch Time**: %.1f hours\n", vs.watchTimeMinutes/60))
+		b.WriteString(fmt.Sprintf("- **Avg Duration**: %.0f seconds\n", vs.avgDurationSecs))
+		b.WriteString(fmt.Sprintf("- **Avg View %%**: %.1f%%\n", vs.avgViewPercent))
+		b.WriteString(fmt.Sprintf("- **Engagement Rate**: %.2f%%\n\n", vs.engagementRate))
+		b.WriteString(fmt.Sprintf("- **Annotation Click Through Rate**: %.2f%%\n\n", vs.annotationCTR))
+		b.WriteString(fmt.Sprintf("- **Annotation Clickable Impressions**: %.2f%%\n\n", vs.annotationImpressions))
+		b.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions**: %.2f%%\n\n", vs.thumbnailImpressions))
+		b.WriteString(fmt.Sprintf("- **Video Thumbnail Impressions Click Rate**: %.2f%%\n\n", vs.thumbnailImpressionsCTR))
 	}
 
-	// Find best performers
+	// Determine and surface the top performer in three key dimensions.
 	if len(videos) > 1 {
-		md.WriteString("## Top Performers\n\n")
+		b.WriteString("## Top Performers\n\n")
 
-		maxViews := videos[0]
-		maxEngagement := videos[0]
-		maxRetention := videos[0]
+		// Seed all three winners with the first video to simplify the comparison loop.
+		bestViews := videos[0]
+		bestEngagement := videos[0]
+		bestRetention := videos[0]
 
-		for _, v := range videos {
-			if v.Views > maxViews.Views {
-				maxViews = v
+		for _, vs := range videos {
+			if vs.views > bestViews.views {
+				bestViews = vs
 			}
-			if v.Engagement > maxEngagement.Engagement {
-				maxEngagement = v
+			if vs.engagementRate > bestEngagement.engagementRate {
+				bestEngagement = vs
 			}
-			if v.AvgPercent > maxRetention.AvgPercent {
-				maxRetention = v
+			if vs.avgViewPercent > bestRetention.avgViewPercent {
+				bestRetention = vs
 			}
 		}
 
-		md.WriteString(fmt.Sprintf("- **Most Views**: \"%s\" (%s views)\n", maxViews.Title, formatNumber(maxViews.Views)))
-		md.WriteString(fmt.Sprintf("- **Highest Engagement**: \"%s\" (%.2f%%)\n", maxEngagement.Title, maxEngagement.Engagement))
-		md.WriteString(fmt.Sprintf("- **Best Retention**: \"%s\" (%.1f%% avg view)\n", maxRetention.Title, maxRetention.AvgPercent))
+		b.WriteString(fmt.Sprintf("- **Most Views**: \"%s\" (%s views)\n", bestViews.title, formatNumber(bestViews.views)))
+		b.WriteString(fmt.Sprintf("- **Highest Engagement**: \"%s\" (%.2f%%)\n", bestEngagement.title, bestEngagement.engagementRate))
+		b.WriteString(fmt.Sprintf("- **Best Retention**: \"%s\" (%.1f%% avg view)\n", bestRetention.title, bestRetention.avgViewPercent))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
+// ComparePublishingScheduleHandler analyses which days of the week yield the highest
+// average views and engagement for the specified channel.
 func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequest, input CompareScheduleInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	channelID := input.ChannelID
-	lookback := input.LookbackDays
-	maxVids := input.MaxVideos
+	lookbackDays := input.LookbackDays
+	maxVideos := input.MaxVideos
 
-	key := fmt.Sprintf("compare_schedule_%s_%d_%d", channelID, lookback, maxVids)
+	cacheKey := fmt.Sprintf("compare_schedule_%s_%d_%d", channelID, lookbackDays, maxVideos)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	// Get channel's uploads
+	// Resolve the uploads playlist for the channel.
 	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
-	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+	uploadsPlaylistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+
 	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
-		PlaylistId(playlistID).MaxResults(int64(maxVids)).Do()
+		PlaylistId(uploadsPlaylistID).
+		MaxResults(int64(maxVideos)).
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	type DayStats struct {
-		Count      int
-		TotalViews uint64
-		AvgViews   float64
-		TotalEng   float64
-		AvgEng     float64
+	// dayStats accumulates per-day-of-week totals used to compute averages later.
+	type dayStats struct {
+		count      int
+		totalViews uint64
+		avgViews   float64
+		totalEng   float64
+		avgEng     float64
 	}
 
-	dayStats := map[string]*DayStats{
+	// Pre-populate all seven days to guarantee every day has an entry in the map.
+	statsByDay := map[string]*dayStats{
 		"Sunday": {}, "Monday": {}, "Tuesday": {}, "Wednesday": {},
 		"Thursday": {}, "Friday": {}, "Saturday": {},
 	}
 
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -lookback).Format("2006-01-02")
+	startDate := time.Now().AddDate(0, 0, -lookbackDays).Format("2006-01-02")
 
 	for _, item := range resp.Items {
-		publishTime, err := time.Parse(time.RFC3339, item.ContentDetails.VideoPublishedAt)
+		// Parse the publication timestamp to extract the day of the week.
+		publishedAt, err := time.Parse(time.RFC3339, item.ContentDetails.VideoPublishedAt)
 		if err != nil {
-			continue
+			continue // Skip videos with malformed publish timestamps.
 		}
 
-		dayName := publishTime.Weekday().String()
+		dayName := publishedAt.Weekday().String()
 		videoID := item.ContentDetails.VideoId
 
-		// Get video stats
+		// Fetch public view/like/comment counts for this video.
 		videoResp, err := services.YoutubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
 		if err != nil || len(videoResp.Items) == 0 {
 			continue
@@ -502,170 +620,193 @@ func ComparePublishingScheduleHandler(ctx context.Context, req *mcp.CallToolRequ
 		likes := videoResp.Items[0].Statistics.LikeCount
 		comments := videoResp.Items[0].Statistics.CommentCount
 
-		// Get analytics
-		metrics := "shares"
+		// Fetch share count from the Analytics API (not available via the Data API).
 		analyticsResp, _ := services.AnalyticsService.Reports.Query().
-			Ids("channel==MINE").StartDate(startDate).EndDate(endDate).
-			Metrics(metrics).Filters("video==" + videoID).Do()
+			Ids("channel==MINE").
+			StartDate(startDate).
+			EndDate(endDate).
+			Metrics("shares").
+			Filters("video==" + videoID).
+			Do()
 
 		shares := float64(0)
 		if analyticsResp != nil && len(analyticsResp.Rows) > 0 && len(analyticsResp.Rows[0]) > 0 {
 			shares = analyticsResp.Rows[0][0].(float64)
 		}
 
-		engagement := float64(0)
+		// Compute per-video engagement rate.
+		engagementRate := float64(0)
 		if views > 0 {
-			engagement = (float64(likes) + float64(comments) + shares) / float64(views) * 100
+			engagementRate = (float64(likes) + float64(comments) + shares) / float64(views) * 100
 		}
 
-		stats := dayStats[dayName]
-		stats.Count++
-		stats.TotalViews += views
-		stats.TotalEng += engagement
+		// Accumulate totals into the day-of-week bucket.
+		ds := statsByDay[dayName]
+		ds.count++
+		ds.totalViews += views
+		ds.totalEng += engagementRate
 	}
 
-	// Calculate averages
-	for _, stats := range dayStats {
-		if stats.Count > 0 {
-			stats.AvgViews = float64(stats.TotalViews) / float64(stats.Count)
-			stats.AvgEng = stats.TotalEng / float64(stats.Count)
+	// Convert accumulated totals to per-day averages.
+	for _, ds := range statsByDay {
+		if ds.count > 0 {
+			ds.avgViews = float64(ds.totalViews) / float64(ds.count)
+			ds.avgEng = ds.totalEng / float64(ds.count)
 		}
 	}
 
-	// Sort days by performance
-	type DayPerf struct {
-		Day   string
-		Stats *DayStats
-	}
-	dayList := []DayPerf{
-		{"Sunday", dayStats["Sunday"]}, {"Monday", dayStats["Monday"]},
-		{"Tuesday", dayStats["Tuesday"]}, {"Wednesday", dayStats["Wednesday"]},
-		{"Thursday", dayStats["Thursday"]}, {"Friday", dayStats["Friday"]},
-		{"Saturday", dayStats["Saturday"]},
+	// dayPerf pairs a day name with its computed stats to allow slice sorting.
+	type dayPerf struct {
+		day   string
+		stats *dayStats
 	}
 
-	// Sort by average views
+	dayList := []dayPerf{
+		{"Sunday", statsByDay["Sunday"]},
+		{"Monday", statsByDay["Monday"]},
+		{"Tuesday", statsByDay["Tuesday"]},
+		{"Wednesday", statsByDay["Wednesday"]},
+		{"Thursday", statsByDay["Thursday"]},
+		{"Friday", statsByDay["Friday"]},
+		{"Saturday", statsByDay["Saturday"]},
+	}
+
+	// Bubble-sort descending by average views (small N makes this acceptable).
 	for i := 0; i < len(dayList)-1; i++ {
 		for j := i + 1; j < len(dayList); j++ {
-			if dayList[j].Stats.AvgViews > dayList[i].Stats.AvgViews {
+			if dayList[j].stats.avgViews > dayList[i].stats.avgViews {
 				dayList[i], dayList[j] = dayList[j], dayList[i]
 			}
 		}
 	}
 
-	var md strings.Builder
-	md.WriteString("# Publishing Schedule Analysis\n\n")
-	md.WriteString(fmt.Sprintf("**Analysis Period**: Last %d days\n", lookback))
-	md.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n\n", len(resp.Items)))
+	var b strings.Builder
+	b.WriteString("# Publishing Schedule Analysis\n\n")
+	b.WriteString(fmt.Sprintf("**Analysis Period**: Last %d days\n", lookbackDays))
+	b.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n\n", len(resp.Items)))
 
-	md.WriteString("## Performance by Day of Week\n\n")
-	md.WriteString("| Day | Videos | Avg Views | Avg Engagement | Recommendation |\n")
-	md.WriteString("|-----|--------|-----------|----------------|----------------|\n")
+	b.WriteString("## Performance by Day of Week\n\n")
+	b.WriteString("| Day | Videos | Avg Views | Avg Engagement | Recommendation |\n")
+	b.WriteString("|-----|--------|-----------|----------------|----------------|\n")
 
 	for i, dp := range dayList {
-		if dp.Stats.Count == 0 {
-			continue
+		if dp.stats.count == 0 {
+			continue // Skip days with no upload data.
 		}
 
-		emoji := ""
-		rec := ""
-		if i == 0 {
-			emoji = "⭐"
-			rec = "Best"
-		} else if i <= 2 {
-			emoji = "✅"
-			rec = "Good"
-		} else if i <= 4 {
-			emoji = "📊"
-			rec = "OK"
-		} else {
-			emoji = "⚠️"
-			rec = "Lower"
+		// Assign a tier-based emoji and label according to performance ranking.
+		var emoji, rec string
+		switch {
+		case i == 0:
+			emoji, rec = "⭐", "Best"
+		case i <= 2:
+			emoji, rec = "✅", "Good"
+		case i <= 4:
+			emoji, rec = "📊", "OK"
+		default:
+			emoji, rec = "⚠️", "Lower"
 		}
 
-		md.WriteString(fmt.Sprintf("| %s | %d | %s | %.2f%% | %s %s |\n",
-			dp.Day, dp.Stats.Count, formatNumber(uint64(dp.Stats.AvgViews)),
-			dp.Stats.AvgEng, emoji, rec))
+		b.WriteString(fmt.Sprintf("| %s | %d | %s | %.2f%% | %s %s |\n",
+			dp.day,
+			dp.stats.count,
+			formatNumber(uint64(dp.stats.avgViews)),
+			dp.stats.avgEng,
+			emoji, rec,
+		))
 	}
 
-	md.WriteString("\n## Recommendations\n\n")
-	if dayList[0].Stats.Count > 0 {
-		md.WriteString(fmt.Sprintf("- **Best Day**: %s with average %s views per video\n",
-			dayList[0].Day, formatNumber(uint64(dayList[0].Stats.AvgViews))))
+	// Summarise the best, second-best, and worst publishing days.
+	b.WriteString("\n## Recommendations\n\n")
+	if dayList[0].stats.count > 0 {
+		b.WriteString(fmt.Sprintf("- **Best Day**: %s with average %s views per video\n",
+			dayList[0].day, formatNumber(uint64(dayList[0].stats.avgViews))))
 	}
-	if dayList[1].Stats.Count > 0 {
-		md.WriteString(fmt.Sprintf("- **Second Best**: %s with average %s views per video\n",
-			dayList[1].Day, formatNumber(uint64(dayList[1].Stats.AvgViews))))
+	if dayList[1].stats.count > 0 {
+		b.WriteString(fmt.Sprintf("- **Second Best**: %s with average %s views per video\n",
+			dayList[1].day, formatNumber(uint64(dayList[1].stats.avgViews))))
 	}
-	if dayList[len(dayList)-1].Stats.Count > 0 {
-		md.WriteString(fmt.Sprintf("- **Avoid**: %s shows lowest average performance\n",
-			dayList[len(dayList)-1].Day))
+	if dayList[len(dayList)-1].stats.count > 0 {
+		b.WriteString(fmt.Sprintf("- **Avoid**: %s shows lowest average performance\n",
+			dayList[len(dayList)-1].day))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
+// CompareVideoFormatsHandler categorises videos by format keywords found in their
+// titles and compares average performance across each format. Videos whose titles
+// do not match any keyword are grouped under "other".
+//
+// This is useful for understanding:-
+// whether tutorial-style, vlog, or short-form content performs best on a given channel.
 func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, input CompareFormatsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	channelID := input.ChannelID
 	keywords := input.FormatKeywords
-	lookback := input.LookbackDays
-	maxVids := input.MaxVideos
+	lookbackDays := input.LookbackDays
+	maxVideos := input.MaxVideos
 
-	key := fmt.Sprintf("compare_formats_%s_%s_%d_%d", channelID, keywords, lookback, maxVids)
+	cacheKey := fmt.Sprintf("compare_formats_%s_%s_%d_%d", channelID, keywords, lookbackDays, maxVideos)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
+	// Normalise keywords to lowercase for case-insensitive title matching.
 	formatKeywords := strings.Split(keywords, ",")
 	for i := range formatKeywords {
 		formatKeywords[i] = strings.TrimSpace(strings.ToLower(formatKeywords[i]))
 	}
 
-	// Get channel's uploads
+	// Resolve the uploads playlist for the channel.
 	chResp, err := services.YoutubeService.Channels.List([]string{"contentDetails"}).Id(channelID).Do()
 	if err != nil || len(chResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("channel not found")
 	}
 
-	playlistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+	uploadsPlaylistID := chResp.Items[0].ContentDetails.RelatedPlaylists.Uploads
+
 	resp, err := services.YoutubeService.PlaylistItems.List([]string{"snippet", "contentDetails"}).
-		PlaylistId(playlistID).MaxResults(int64(maxVids)).Do()
+		PlaylistId(uploadsPlaylistID).
+		MaxResults(int64(maxVideos)).
+		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	type FormatStats struct {
-		Count      int
-		TotalViews uint64
-		AvgViews   float64
-		TotalWatch float64
-		AvgWatch   float64
-		TotalDur   float64
-		AvgDur     float64
-		TotalPct   float64
-		AvgPct     float64
-		TotalEng   float64
-		AvgEng     float64
+	// formatStats accumulates per-format totals across all videos in that category.
+	type formatStats struct {
+		count      int
+		totalViews uint64
+		avgViews   float64
+		totalWatch float64 // Total minutes watched.
+		avgWatch   float64
+		totalDur   float64 // Sum of average durations in seconds.
+		avgDur     float64
+		totalPct   float64 // Sum of average view percentages.
+		avgPct     float64
+		totalEng   float64 // Sum of per-video engagement rates.
+		avgEng     float64
 	}
 
-	formatStats := make(map[string]*FormatStats)
+	// Initialise a bucket for each keyword plus a catch-all "other" bucket.
+	statsByFormat := make(map[string]*formatStats)
 	for _, kw := range formatKeywords {
-		formatStats[kw] = &FormatStats{}
+		statsByFormat[kw] = &formatStats{}
 	}
-	formatStats["other"] = &FormatStats{}
+	statsByFormat["other"] = &formatStats{}
 
 	endDate := time.Now().Format("2006-01-02")
-	startDate := time.Now().AddDate(0, 0, -lookback).Format("2006-01-02")
+	startDate := time.Now().AddDate(0, 0, -lookbackDays).Format("2006-01-02")
 
 	for _, item := range resp.Items {
 		title := strings.ToLower(item.Snippet.Title)
 		videoID := item.ContentDetails.VideoId
 
-		// Categorize video
+		// Assign the video to the first matching keyword bucket (first-match wins).
 		format := "other"
 		for _, kw := range formatKeywords {
 			if strings.Contains(title, kw) {
@@ -674,7 +815,7 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 			}
 		}
 
-		// Get video stats
+		// Fetch public statistics for this video.
 		videoResp, err := services.YoutubeService.Videos.List([]string{"statistics"}).Id(videoID).Do()
 		if err != nil || len(videoResp.Items) == 0 {
 			continue
@@ -684,17 +825,16 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 		likes := videoResp.Items[0].Statistics.LikeCount
 		comments := videoResp.Items[0].Statistics.CommentCount
 
-		// Get analytics
-		metrics := "estimatedMinutesWatched,averageViewDuration,averageViewPercentage,shares"
+		// Fetch richer watch-time and retention analytics from the Analytics API.
 		analyticsResp, _ := services.AnalyticsService.Reports.Query().
-			Ids("channel==MINE").StartDate(startDate).EndDate(endDate).
-			Metrics(metrics).Filters("video==" + videoID).Do()
+			Ids("channel==MINE").
+			StartDate(startDate).
+			EndDate(endDate).
+			Metrics("estimatedMinutesWatched,averageViewDuration,averageViewPercentage,shares").
+			Filters("video==" + videoID).
+			Do()
 
-		watchTime := float64(0)
-		avgDur := float64(0)
-		avgPct := float64(0)
-		shares := float64(0)
-
+		var watchTime, avgDur, avgPct, shares float64
 		if analyticsResp != nil && len(analyticsResp.Rows) > 0 && len(analyticsResp.Rows[0]) >= 4 {
 			row := analyticsResp.Rows[0]
 			watchTime = row[0].(float64)
@@ -703,111 +843,127 @@ func CompareVideoFormatsHandler(ctx context.Context, req *mcp.CallToolRequest, i
 			shares = row[3].(float64)
 		}
 
-		engagement := float64(0)
+		// Compute per-video engagement rate before accumulating into the format bucket.
+		engagementRate := float64(0)
 		if views > 0 {
-			engagement = (float64(likes) + float64(comments) + shares) / float64(views) * 100
+			engagementRate = (float64(likes) + float64(comments) + shares) / float64(views) * 100
 		}
 
-		stats := formatStats[format]
-		stats.Count++
-		stats.TotalViews += views
-		stats.TotalWatch += watchTime
-		stats.TotalDur += avgDur
-		stats.TotalPct += avgPct
-		stats.TotalEng += engagement
+		fs := statsByFormat[format]
+		fs.count++
+		fs.totalViews += views
+		fs.totalWatch += watchTime
+		fs.totalDur += avgDur
+		fs.totalPct += avgPct
+		fs.totalEng += engagementRate
 	}
 
-	// Calculate averages
-	for _, stats := range formatStats {
-		if stats.Count > 0 {
-			stats.AvgViews = float64(stats.TotalViews) / float64(stats.Count)
-			stats.AvgWatch = stats.TotalWatch / float64(stats.Count)
-			stats.AvgDur = stats.TotalDur / float64(stats.Count)
-			stats.AvgPct = stats.TotalPct / float64(stats.Count)
-			stats.AvgEng = stats.TotalEng / float64(stats.Count)
-		}
-	}
-
-	// Sort formats by average views
-	type FormatPerf struct {
-		Format string
-		Stats  *FormatStats
-	}
-	formatList := []FormatPerf{}
-	for format, stats := range formatStats {
-		if stats.Count > 0 {
-			formatList = append(formatList, FormatPerf{format, stats})
+	// Calculate per-format averages now that all videos have been processed.
+	for _, fs := range statsByFormat {
+		if fs.count > 0 {
+			fs.avgViews = float64(fs.totalViews) / float64(fs.count)
+			fs.avgWatch = fs.totalWatch / float64(fs.count)
+			fs.avgDur = fs.totalDur / float64(fs.count)
+			fs.avgPct = fs.totalPct / float64(fs.count)
+			fs.avgEng = fs.totalEng / float64(fs.count)
 		}
 	}
 
+	// formatPerf enables slice-sorting of formats by average views.
+	type formatPerf struct {
+		format string
+		stats  *formatStats
+	}
+
+	// Collect only formats that contain at least one video.
+	var formatList []formatPerf
+	for format, fs := range statsByFormat {
+		if fs.count > 0 {
+			formatList = append(formatList, formatPerf{format, fs})
+		}
+	}
+
+	// Bubble-sort descending by average views.
 	for i := 0; i < len(formatList)-1; i++ {
 		for j := i + 1; j < len(formatList); j++ {
-			if formatList[j].Stats.AvgViews > formatList[i].Stats.AvgViews {
+			if formatList[j].stats.avgViews > formatList[i].stats.avgViews {
 				formatList[i], formatList[j] = formatList[j], formatList[i]
 			}
 		}
 	}
 
-	var md strings.Builder
-	md.WriteString("# Video Format Comparison\n\n")
-	md.WriteString(fmt.Sprintf("**Analysis Period**: Last %d days\n", lookback))
-	md.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n", len(resp.Items)))
-	md.WriteString(fmt.Sprintf("**Format Keywords**: %s\n\n", keywords))
+	var b strings.Builder
+	b.WriteString("# Video Format Comparison\n\n")
+	b.WriteString(fmt.Sprintf("**Analysis Period**: Last %d days\n", lookbackDays))
+	b.WriteString(fmt.Sprintf("**Videos Analyzed**: %d\n", len(resp.Items)))
+	b.WriteString(fmt.Sprintf("**Format Keywords**: %s\n\n", keywords))
 
-	md.WriteString("## Performance by Format\n\n")
-	md.WriteString("| Format | Count | Avg Views | Avg Watch Time | Avg Duration | Avg View % | Engagement |\n")
-	md.WriteString("|--------|-------|-----------|----------------|--------------|------------|------------|\n")
+	b.WriteString("## Performance by Format\n\n")
+	b.WriteString("| Format | Count | Avg Views | Avg Watch Time | Avg Duration | Avg View % | Engagement |\n")
+	b.WriteString("|--------|-------|-----------|----------------|--------------|------------|------------|\n")
 
 	for _, fp := range formatList {
-		md.WriteString(fmt.Sprintf("| %s | %d | %s | %.1f hrs | %.0fs | %.1f%% | %.2f%% |\n",
-			strings.ToTitle(fp.Format), fp.Stats.Count, formatNumber(uint64(fp.Stats.AvgViews)),
-			fp.Stats.AvgWatch/60, fp.Stats.AvgDur, fp.Stats.AvgPct, fp.Stats.AvgEng))
+		b.WriteString(fmt.Sprintf("| %s | %d | %s | %.1f hrs | %.0fs | %.1f%% | %.2f%% |\n",
+			strings.ToTitle(fp.format),
+			fp.stats.count,
+			formatNumber(uint64(fp.stats.avgViews)),
+			fp.stats.avgWatch/60, // Convert minutes to hours.
+			fp.stats.avgDur,
+			fp.stats.avgPct,
+			fp.stats.avgEng,
+		))
 	}
 
-	md.WriteString("\n## Insights & Recommendations\n\n")
+	// Surface actionable insights based on known performance thresholds.
+	b.WriteString("\n## Insights & Recommendations\n\n")
 	if len(formatList) > 0 {
 		best := formatList[0]
-		md.WriteString(fmt.Sprintf("- **Best Performing Format**: \"%s\" with %s avg views\n",
-			strings.ToTitle(best.Format), formatNumber(uint64(best.Stats.AvgViews))))
+		b.WriteString(fmt.Sprintf("- **Best Performing Format**: \"%s\" with %s avg views\n",
+			strings.ToTitle(best.format), formatNumber(uint64(best.stats.avgViews))))
 
 		for _, fp := range formatList {
-			if fp.Stats.AvgPct > 70 {
-				md.WriteString(fmt.Sprintf("- **High Retention**: \"%s\" format keeps %.1f%% of viewers\n",
-					strings.ToTitle(fp.Format), fp.Stats.AvgPct))
+			// Highlight formats where viewers watch the majority of the video.
+			if fp.stats.avgPct > 70 {
+				b.WriteString(fmt.Sprintf("- **High Retention**: \"%s\" format keeps %.1f%% of viewers\n",
+					strings.ToTitle(fp.format), fp.stats.avgPct))
 			}
-			if fp.Stats.AvgEng > 8 {
-				md.WriteString(fmt.Sprintf("- **High Engagement**: \"%s\" format has %.2f%% engagement rate\n",
-					strings.ToTitle(fp.Format), fp.Stats.AvgEng))
+			// Highlight formats that drive strong audience interaction.
+			if fp.stats.avgEng > 8 {
+				b.WriteString(fmt.Sprintf("- **High Engagement**: \"%s\" format has %.2f%% engagement rate\n",
+					strings.ToTitle(fp.format), fp.stats.avgEng))
 			}
 		}
 
-		md.WriteString(fmt.Sprintf("\n**Strategy Tip**: Focus on creating more \"%s\" content as it shows the strongest performance.\n",
-			strings.ToTitle(best.Format)))
+		b.WriteString(fmt.Sprintf("\n**Strategy Tip**: Focus on creating more \"%s\" content as it shows the strongest performance.\n",
+			strings.ToTitle(best.format)))
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }
 
+// GetVideoCommentsHandler retrieves up to maxResults top-level comments for a given
+// video, including the author, like count, publish time, and reply count.
 func GetVideoCommentsHandler(ctx context.Context, req *mcp.CallToolRequest, input VideoCommentsInput) (*mcp.CallToolResult, MarkdownOutput, error) {
 	videoID := input.VideoID
+
 	maxResults := input.MaxResults
 	if maxResults == 0 {
-		maxResults = 50
+		maxResults = 50 // Default to 50 comments when not specified.
 	}
 	if maxResults > 100 {
-		maxResults = 100
+		maxResults = 100 // Cap at 100 to respect YouTube API quota limits.
 	}
 
-	key := fmt.Sprintf("comments_%s_%d", videoID, maxResults)
+	cacheKey := fmt.Sprintf("comments_%s_%d", videoID, maxResults)
 	if !input.ForceRefresh {
-		if cached, ok := services.Cache.Get(key); ok {
+		if cached, ok := services.Cache.Get(cacheKey); ok {
 			return nil, MarkdownOutput{Content: cached}, nil
 		}
 	}
 
-	// Get video details first
+	// Fetch the video title to include in the Markdown heading.
 	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet"}).Id(videoID).Do()
 	if err != nil || len(videoResp.Items) == 0 {
 		return nil, MarkdownOutput{}, fmt.Errorf("video not found")
@@ -815,44 +971,46 @@ func GetVideoCommentsHandler(ctx context.Context, req *mcp.CallToolRequest, inpu
 
 	videoTitle := videoResp.Items[0].Snippet.Title
 
-	// Get comments for the video
+	// Retrieve comment threads in plain-text format for easier downstream parsing.
 	commentsResp, err := services.YoutubeService.CommentThreads.List([]string{"snippet"}).
-		VideoId(videoID).MaxResults(maxResults).
+		VideoId(videoID).
+		MaxResults(maxResults).
 		TextFormat("plainText").
 		Do()
 	if err != nil {
 		return nil, MarkdownOutput{}, err
 	}
 
-	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# Comments for Video: %s\n\n", videoTitle))
-	md.WriteString(fmt.Sprintf("**Video ID**: `%s`\n", videoID))
-	md.WriteString(fmt.Sprintf("**Total Comments Retrieved**: %d\n\n", len(commentsResp.Items)))
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("# Comments for Video: %s\n\n", videoTitle))
+	b.WriteString(fmt.Sprintf("**Video ID**: `%s`\n", videoID))
+	b.WriteString(fmt.Sprintf("**Total Comments Retrieved**: %d\n\n", len(commentsResp.Items)))
 
 	if len(commentsResp.Items) == 0 {
-		md.WriteString("No comments found for this video.")
-		result := md.String()
-		services.Cache.Set(key, result)
-		return nil, MarkdownOutput{Content: result}, nil
+		b.WriteString("No comments found for this video.")
+		out := b.String()
+		services.Cache.Set(cacheKey, out)
+		return nil, MarkdownOutput{Content: out}, nil
 	}
 
-	md.WriteString("## Comments\n\n")
+	b.WriteString("## Comments\n\n")
 
 	for i, thread := range commentsResp.Items {
 		topComment := thread.Snippet.TopLevelComment.Snippet
-		md.WriteString(fmt.Sprintf("### %d. %s\n", i+1, topComment.AuthorDisplayName))
-		md.WriteString(fmt.Sprintf("- **Likes**: %d\n", topComment.LikeCount))
-		md.WriteString(fmt.Sprintf("- **Published At**: %s\n", topComment.PublishedAt))
-		md.WriteString(fmt.Sprintf("- **Comment**: %s\n", topComment.TextDisplay))
 
-		// Include reply count if there are replies
+		b.WriteString(fmt.Sprintf("### %d. %s\n", i+1, topComment.AuthorDisplayName))
+		b.WriteString(fmt.Sprintf("- **Likes**: %d\n", topComment.LikeCount))
+		b.WriteString(fmt.Sprintf("- **Published At**: %s\n", topComment.PublishedAt))
+		b.WriteString(fmt.Sprintf("- **Comment**: %s\n", topComment.TextDisplay))
+
+		// Include reply count only when replies exist to reduce visual noise.
 		if thread.Snippet.TotalReplyCount > 0 {
-			md.WriteString(fmt.Sprintf("- **Replies**: %d\n", thread.Snippet.TotalReplyCount))
+			b.WriteString(fmt.Sprintf("- **Replies**: %d\n", thread.Snippet.TotalReplyCount))
 		}
-		md.WriteString("\n")
+		b.WriteString("\n")
 	}
 
-	result := md.String()
-	services.Cache.Set(key, result)
-	return nil, MarkdownOutput{Content: result}, nil
+	out := b.String()
+	services.Cache.Set(cacheKey, out)
+	return nil, MarkdownOutput{Content: out}, nil
 }

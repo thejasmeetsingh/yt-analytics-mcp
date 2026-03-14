@@ -25,17 +25,22 @@ func NewMCPServer() (*goMCP.Server, error) {
 	goMCP.AddTool(server, &goMCP.Tool{
 		Name:        "get_channel_analytics",
 		Description: "Get comprehensive analytics data for a channel within a date range",
-	}, tools.GetChannelAnalyticsHandler)
+	}, tools.ChannelAnalyticsHandler)
 
 	goMCP.AddTool(server, &goMCP.Tool{
 		Name:        "get_video_list",
 		Description: "Get a list of all videos from a channel with basic information",
-	}, tools.GetVideoListHandler)
+	}, tools.VideoListHandler)
 
 	goMCP.AddTool(server, &goMCP.Tool{
 		Name:        "get_video_analytics",
 		Description: "Get detailed analytics for specific videos",
-	}, tools.GetVideoAnalyticsHandler)
+	}, tools.VideoAnalyticsHandler)
+
+	goMCP.AddTool(server, &goMCP.Tool{
+		Name:        "get_video_comments",
+		Description: "Get list of all the top level comments of a video",
+	}, tools.GetVideoCommentsHandler)
 
 	// Add comparison tools
 	goMCP.AddTool(server, &goMCP.Tool{
@@ -57,11 +62,6 @@ func NewMCPServer() (*goMCP.Server, error) {
 		Name:        "compare_video_formats",
 		Description: "Compare performance across different video formats/types by analyzing title patterns",
 	}, tools.CompareVideoFormatsHandler)
-
-	goMCP.AddTool(server, &goMCP.Tool{
-		Name:        "get_video_comments",
-		Description: "Get list of all the top level comments of a video",
-	}, tools.GetVideoCommentsHandler)
 
 	// Add Rate Limiter Middleware
 	server.AddReceivingMiddleware(RateLimiter(rate.NewLimiter(rate.Every(time.Second/5), 10)))
