@@ -73,11 +73,43 @@ scoop install thejasmeetsingh/yt-analytics-mcp
 
 ### Generate or Refresh Auth Token
 
-Run this command after installation to authenticate with your Google account. You can also re-run it at any time to regenerate an expired or revoked token — just follow the prompts to grant the app access to your YouTube credentials:
+Run this command after installation to authenticate with your Google account. You can also re-run it at any time to regenerate an expired or revoked token:
 
 ```bash
 yt-analytics-mcp -credentials=/path/to/client_secret.json -token
 ```
+
+This command starts an interactive authentication flow. Here's exactly what to expect:
+
+**Step 1 — A URL appears in your terminal.**
+After running the command, you'll see output similar to this:
+
+```
+=== YouTube API Authorization Required ===
+
+Please visit this URL in your browser:
+https://accounts.google.com/o/oauth2/auth?client_id=...
+
+After authorizing, paste the authorization code here:
+```
+
+**Step 2 — Open the URL in your browser.**
+Copy the full URL and paste it into any browser. Sign in with the Google account that owns your YouTube channel.
+
+**Step 3 — Grant permissions.**
+Google will ask you to allow the app access to your YouTube data. Click **Allow**. If you see a warning that the app isn't verified, click **Advanced** → **Go to [app name] (unsafe)** — this is expected for apps in testing mode.
+
+**Step 4 — Copy the code from the redirect page.**
+After granting access, Google redirects you to a page that may look broken or blank. That's normal. Look at the URL in your browser's address bar — it will contain a `code=` parameter, for example:
+
+```
+http://localhost/?code=4/0AX4XfWh...&scope=...
+```
+
+Copy everything after `code=` up to the `&` (or to the end of the URL if there is no `&`). This is your verification code.
+
+**Step 5 — Paste the code into your terminal.**
+Go back to your terminal, paste the code at the `After authorizing, paste the authorization code here:` prompt, and press Enter. The app will exchange the code for credentials and save them locally. You won't need to do this again unless your token expires or is revoked.
 
 ## MCP Configuration
 
@@ -285,11 +317,10 @@ Returns:
 
 ### Authentication errors
 
-- Re-run the token command to generate a fresh token — this works for both first-time setup and expired or revoked tokens:
+- Re-run the token command and follow the step-by-step flow described in the [Generate or Refresh Auth Token](#generate-or-refresh-auth-token) section above — this works for both first-time setup and expired or revoked tokens:
   ```bash
   yt-analytics-mcp -credentials=/path/to/client_secret.json -token
   ```
-- Follow the browser prompts to grant the app access to your YouTube account
 - Make sure your Google account is listed as a test user in the OAuth consent screen
 - If you haven't used the app in a while, your token may have expired — regenerating it via the command above is all that's needed
 
