@@ -100,7 +100,7 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("%w: %v", ErrExchangingAuthCode, err)
 	}
 
-	fmt.Println("✓ Authorization successful!")
+	fmt.Println(Green + "✓ Authorization successful!" + Reset)
 	return token, nil
 }
 
