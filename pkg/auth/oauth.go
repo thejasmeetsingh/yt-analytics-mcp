@@ -20,6 +20,13 @@ const (
 )
 
 var (
+	// Escape Codes
+	Reset = "\033[0m"
+	Red   = "\033[31m"
+	Green = "\033[32m"
+	Blue  = "\033[34m"
+	Cyan  = "\033[36m"
+
 	ErrReadingCredentials = fmt.Errorf("failed to read credentials file")
 	ErrParsingCredentials = fmt.Errorf("failed to parse credentials")
 	ErrReadingToken       = fmt.Errorf("failed to read token file")
@@ -76,9 +83,10 @@ func GetClient(rootPath string, config *oauth2.Config, generateToken bool) (*htt
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 
-	fmt.Println("=== YouTube API Authorization Required ===")
-	fmt.Printf("Please visit this URL in your browser:\n%s\n\n", authURL)
-	fmt.Print("After authorizing, paste the authorization code here: ")
+	fmt.Println(Red + "\n=== YouTube API Authorization Required ===\n" + Reset)
+	fmt.Println(Green + "Please visit this URL in your browser:" + Reset)
+	fmt.Println(Blue + authURL + Reset + "\n")
+	fmt.Print(Cyan + "After authorizing, paste the authorization code here: " + Reset)
 
 	// Read authorization code from user input
 	var authCode string
