@@ -23,29 +23,28 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
-3. Enable billing (required for API access) - No payment is required for testing
+3. Enable billing (required for API access) — no payment is required for testing
 
 ### Step 2: Enable Required APIs
 
-1. Navigate to "APIs & Services" > "Library"
+1. Navigate to **APIs & Services** > **Library**
 2. Search and enable:
-   - **YouTube Data API v3**
-   - **YouTube Analytics API**
+   - YouTube Data API v3
+   - YouTube Analytics API
 
-### Step 3: Create OAuth 2.0 credentials
+### Step 3: Create OAuth 2.0 Credentials
 
-1. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
-2. Choose "Desktop app" as application type
+1. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
+2. Choose **Desktop app** as the application type
 3. Download the JSON file and save it as `client_secret.json`
-4. Make sure to add some branding details and _Test Users_:
-   - Navigate to console.cloud.google.com
+4. Add branding details and test users:
+   - Navigate to [console.cloud.google.com](https://console.cloud.google.com)
    - Select your project
-   - In the left sidebar, go to: APIs & Services → OAuth consent screen
-   - Scroll down to the "Test users" section
-   - Click "+ ADD USERS"
-   - Enter your Google/Gmail email address (the one associated with your YouTube channel)
-   - Click Save
-   - _Make sure "User Type" is set to "External" (unless you have a Google Workspace account)_
+   - Go to **APIs & Services** → **OAuth consent screen**
+   - Scroll down to **Test users** and click **+ ADD USERS**
+   - Enter the Gmail address associated with your YouTube channel
+   - Click **Save**
+   - Ensure **User Type** is set to **External** (unless you have a Google Workspace account)
 
 ## Installation
 
@@ -53,7 +52,7 @@ A Model Context Protocol (MCP) server that provides comprehensive YouTube channe
 
 ```bash
 brew tap thejasmeetsingh/yt-analytics-mcp https://github.com/thejasmeetsingh/yt-analytics-mcp
-brew install --cask yt-analytics-mcp  # or: brew install yt-analytics-mcp
+brew install --cask yt-analytics-mcp
 ```
 
 ### Linux
@@ -63,9 +62,7 @@ wget https://github.com/thejasmeetsingh/yt-analytics-mcp/releases/download/v{tag
 sudo dpkg -i yt-analytics-mcp_{tag}_linux_x86_64.deb
 ```
 
-**Note:**
-Replace `{tag}` with the specific version number from the repository (e.g., `0.1.0`).
-This tag corresponds to the release version available on the GitHub repository.
+> Replace `{tag}` with the specific version number from the [releases page](https://github.com/thejasmeetsingh/yt-analytics-mcp/releases) (e.g. `0.1.0`).
 
 ### Windows
 
@@ -74,7 +71,9 @@ scoop bucket add thejasmeetsingh https://github.com/thejasmeetsingh/yt-analytics
 scoop install thejasmeetsingh/yt-analytics-mcp
 ```
 
-### Generate Auth Token
+### Generate or Refresh Auth Token
+
+Run this command after installation to authenticate with your Google account. You can also re-run it at any time to regenerate an expired or revoked token — just follow the prompts to grant the app access to your YouTube credentials:
 
 ```bash
 yt-analytics-mcp -credentials=/path/to/client_secret.json -token
@@ -82,34 +81,47 @@ yt-analytics-mcp -credentials=/path/to/client_secret.json -token
 
 ## MCP Configuration
 
-Add this to your MCP settings file (e.g., `claude_desktop_config.json` for Claude Desktop):
+Add the following to your MCP settings file. For Claude Desktop this is typically `claude_desktop_config.json`:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**macOS / Linux:**
 
 ```json
 {
   "mcpServers": {
     "youtube-analytics": {
-      "command": "yt-analytics-mcp", // "yt-analytics-mcp.exe" for windows
+      "command": "yt-analytics-mcp",
       "args": ["-credentials", "/path/to/client_secret.json"]
     }
   }
 }
 ```
 
-For Claude Desktop, the config file is typically located at:
+**Windows:**
 
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+```json
+{
+  "mcpServers": {
+    "youtube-analytics": {
+      "command": "yt-analytics-mcp.exe",
+      "args": ["-credentials", "C:\\path\\to\\client_secret.json"]
+    }
+  }
+}
+```
 
 ## Usage
 
-Once the server is running and configured with your MCP client, you can use these tools:
+Once the server is running and configured with your MCP client, you can use the following tools.
 
 ### 1. List Your Channels
 
-First, get your channel IDs:
+Get your channel IDs — you'll need these for most other tools:
 
 ```
-Use the list_channels tool to see all channels
+Use the list_channels tool to see all my channels
 ```
 
 ### 2. Get Channel Details
@@ -127,8 +139,7 @@ Get analytics for channel UC_x5XG1OV2P6uZZ5FSM9Ttw
 ### 4. Get Custom Date Range Analytics
 
 ```
-Get analytics for channel UC_x5XG1OV2P6uZZ5FSM9Ttw
-from 2024-01-01 to 2024-12-31
+Get analytics for channel UC_x5XG1OV2P6uZZ5FSM9Ttw from 2024-01-01 to 2024-12-31
 ```
 
 ### 5. List Videos
@@ -140,20 +151,16 @@ List the last 50 videos from channel UC_x5XG1OV2P6uZZ5FSM9Ttw
 ### 6. Get Video Analytics
 
 ```
-Get analytics for video IDs: dQw4w9WgXcQ,abc123def
-from the last 30 days
+Get analytics for video IDs: dQw4w9WgXcQ,abc123def from the last 30 days
 ```
 
 ### 7. Force Refresh (Bypass Cache)
 
 ```
-Get analytics for channel UC_x5XG1OV2P6uZZ5FSM9Ttw
-with force_refresh set to true
+Get analytics for channel UC_x5XG1OV2P6uZZ5FSM9Ttw with force_refresh set to true
 ```
 
-### Comparison Tools Examples 🆕
-
-#### 8. Compare Two Time Periods
+### 8. Compare Two Time Periods
 
 ```
 Compare my channel performance:
@@ -161,53 +168,45 @@ December 2024 (2024-12-01 to 2024-12-31)
 vs November 2024 (2024-11-01 to 2024-11-30)
 ```
 
-This will show you:
-
-- Views, watch time, engagement changes
+Returns:
+- Views, watch time, and engagement changes
 - Subscriber growth comparison
 - Percentage changes with trend indicators
 - Key insights on what improved or declined
 
-#### 9. Compare Multiple Videos
+### 9. Compare Multiple Videos
 
 ```
-Compare these videos: dQw4w9WgXcQ,abc123def,xyz789ghi
-from the last 30 days
+Compare these videos: dQw4w9WgXcQ,abc123def,xyz789ghi from the last 30 days
 ```
 
-This shows:
-
+Returns:
 - Side-by-side performance metrics
-- Which video got most views, engagement, retention
-- Detailed breakdown of each video
-- Identifies your top performers
+- Which video had the most views, engagement, and retention
+- Detailed per-video breakdown
+- Top performer highlights
 
-#### 10. Analyze Publishing Schedule
+### 10. Analyze Publishing Schedule
 
 ```
-Which days work best for my uploads on channel UC_x5XG1OV2P6uZZ5FSM9Ttw?
-Look back 90 days
+Which days work best for uploads on channel UC_x5XG1OV2P6uZZ5FSM9Ttw? Look back 90 days
 ```
 
-This reveals:
-
+Returns:
 - Average views by day of week
 - Engagement rates per day
-- Recommendations on best/worst days
-- Data-driven publishing strategy
+- Best and worst days to publish
 
-#### 11. Compare Video Formats
+### 11. Compare Video Formats
 
 ```
-Compare my video formats on channel UC_x5XG1OV2P6uZZ5FSM9Ttw
-with keywords: tutorial,review,tips,shorts
-from the last 90 days
+Compare video formats on channel UC_x5XG1OV2P6uZZ5FSM9Ttw
+with keywords: tutorial,review,tips,shorts over the last 90 days
 ```
 
-This analyzes:
-
+Returns:
 - Performance by content type
-- Which formats get best views/retention
+- Which formats get the best views and retention
 - Engagement by format
 - Strategic recommendations on what to create more of
 
@@ -215,98 +214,95 @@ This analyzes:
 
 ### Basic Analytics
 
-1. **list_channels** - List all your YouTube channels
-2. **get_channel_details** - Get channel information and statistics
-3. **get_channel_analytics** - Comprehensive analytics for a date range
-4. **get_video_list** - List videos from a channel
-5. **get_video_analytics** - Detailed analytics for specific videos
+| Tool | Description |
+|------|-------------|
+| `list_channels` | List all your YouTube channels |
+| `get_channel_details` | Get channel information and statistics |
+| `get_channel_analytics` | Comprehensive analytics for a date range |
+| `get_video_list` | List videos from a channel |
+| `get_video_analytics` | Detailed analytics for specific videos |
 
-### Comparison Tools 🆕
+### Comparison Tools
 
-6. **compare_channel_periods** - Compare performance between two time periods
-7. **compare_videos** - Side-by-side comparison of multiple videos
-8. **compare_publishing_schedule** - Find which days perform best for uploads
-9. **compare_video_formats** - Compare performance by content type (tutorials, reviews, etc.)
+| Tool | Description |
+|------|-------------|
+| `compare_channel_periods` | Compare performance between two time periods |
+| `compare_videos` | Side-by-side comparison of multiple videos |
+| `compare_publishing_schedule` | Find which days of the week perform best for uploads |
+| `compare_video_formats` | Compare performance by content type (tutorials, reviews, etc.) |
 
 ## Available Metrics
 
 ### Channel Analytics
-
-- Total views
-- Total watch time (hours)
-- Total likes
-- Total comments
-- Total shares
-- Subscribers gained
-- Subscribers lost
-- Net subscriber change
-- Average view duration
-- Average view percentage
+- Total views, watch time (hours), likes, comments, shares
+- Subscribers gained, lost, and net change
+- Average view duration and view percentage
 - Engagement rate
-- Top traffic sources
 
 ### Video Analytics
-
-- Views
-- Likes
-- Comments
-- Watch time
-- Average view duration
-- Average view percentage
-- Shares
+- Views, likes, comments, shares
+- Watch time, average view duration, average view percentage
 
 ### Comparison Metrics
-
-- Period-over-period growth
+- Period-over-period growth rates
 - Video performance rankings
 - Day-of-week performance patterns
 - Content format performance analysis
 
 ## Rate Limiting & Caching
 
-- **Rate Limit**: 5 requests per second - Burst is 10
-- **Cache TTL**: 5 minutes
-- **Force Refresh**: Use `force_refresh: true` to bypass cache
+| Setting | Value |
+|---------|-------|
+| Rate limit | 5 requests/second (burst: 10) |
+| Cache TTL | 5 minutes |
+| Force refresh | Pass `force_refresh: true` to bypass cache |
 
 ## Troubleshooting
 
-### "API key not valid" Error
+### "API key not valid" error
 
-- Verify your API key is correct
-- Check that YouTube Data API v3 and YouTube Analytics API are enabled
-- Ensure the API key isn't restricted from these APIs
+- Verify your `client_secret.json` file is correct and not corrupted
+- Confirm that YouTube Data API v3 and YouTube Analytics API are both enabled in your Google Cloud project
+- Check that the OAuth client has not been deleted or disabled
 
-### "Channel not found" Error
+### "Channel not found" error
 
-- Make sure you're using the correct channel ID (starts with UC)
-- Verify the channel belongs to the Google account that created the API key
+- Channel IDs start with `UC` — double-check you're not using a handle or custom URL
+- Confirm the channel belongs to the Google account used during `yt-analytics-mcp -token`
 
-### "Quota exceeded" Error
+### "Quota exceeded" error
 
-- YouTube API has daily quota limits
-- Wait for quota to reset (usually at midnight Pacific Time)
-- Consider implementing longer cache times or reducing requests
+- YouTube Data API v3 has a default limit of 10,000 units per day
+- Quota resets at midnight Pacific Time
+- Monitor your usage in the [Google Cloud Console](https://console.cloud.google.com/) under **APIs & Services** → **Quotas**
+- Increase cache TTL or reduce request frequency to stay within limits
 
-### Analytics Data is Empty
+### Analytics data is empty
 
-- Make sure your channel has the YouTube Partner Program enabled
-- Some analytics require a minimum threshold of views/watch time
-- Check that your date range is valid
+- Some analytics require the YouTube Partner Program to be enabled on your channel
+- Certain metrics have a minimum view/watch-time threshold before data appears
+- Verify your date range falls within a period that has actual activity
 
-### Authentication Issues
+### Authentication errors
 
-- The YouTube Analytics API requires OAuth 2.0 for some features
-- This implementation uses API Key authentication which has limitations
-- For full analytics access, consider implementing OAuth 2.0
+- Re-run the token command to generate a fresh token — this works for both first-time setup and expired or revoked tokens:
+  ```bash
+  yt-analytics-mcp -credentials=/path/to/client_secret.json -token
+  ```
+- Follow the browser prompts to grant the app access to your YouTube account
+- Make sure your Google account is listed as a test user in the OAuth consent screen
+- If you haven't used the app in a while, your token may have expired — regenerating it via the command above is all that's needed
 
 ## API Quota Information
 
-YouTube Data API v3 has a quota limit of **10,000 units per day** by default:
+YouTube Data API v3 defaults to **10,000 units per day**:
 
-- `list` operations: 1 unit
-- `search` operations: 100 units
+| Operation | Cost |
+|-----------|------|
+| `list` | 1 unit |
+| `search` | 100 units |
 
-The rate limiter in this server helps prevent hitting rate limits, but monitor your daily quota in the Google Cloud Console.
+The built-in rate limiter helps avoid hitting limits during normal use, but check your daily quota in the Google Cloud Console if you run many requests.
 
 ## Contributing
 
@@ -314,19 +310,17 @@ Feel free to open issues or submit pull requests for improvements!
 
 ## License
 
-MIT License - feel free to use this for your projects!
+MIT License — feel free to use this in your own projects.
 
 ---
 
-Once configured with Claude Desktop, you can ask:
+Once configured with Claude Desktop, you can ask things like:
 
 - "Show me my YouTube channels"
 - "What are my analytics for the last month?"
 - "Compare my top 5 videos"
 - "How did my channel perform in Q4 2024?"
-- **"Compare December vs November performance"** 🆕
-- **"Which days should I upload videos?"** 🆕
-- **"Do my tutorials or reviews perform better?"** 🆕
-- **"Show me my best performing content types"** 🆕
-
-The server will automatically use the appropriate tools and return formatted markdown responses!
+- "Compare December vs November performance"
+- "Which days should I upload videos?"
+- "Do my tutorials or reviews perform better?"
+- "Show me my best performing content types"
