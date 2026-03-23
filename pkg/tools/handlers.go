@@ -195,7 +195,7 @@ func VideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input 
 	}
 
 	// Batch-fetch snippet and statistics for all video IDs in a single API call.
-	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics"}).
+	videoResp, err := services.YoutubeService.Videos.List([]string{"snippet", "statistics", "contentDetails"}).
 		Id(strings.Join(ids, ",")).
 		Do()
 	if err != nil {
@@ -207,12 +207,13 @@ func VideoAnalyticsHandler(ctx context.Context, req *mcp.CallToolRequest, input 
 
 	for _, v := range videoResp.Items {
 		b.WriteString(fmt.Sprintf(
-			"## %s\n\n- **ID**: `%s`\n- **Views**: %s\n- **Likes**: %s\n- **Comments**: %s\n\n",
+			"## %s\n\n- **ID**: `%s`\n- **Views**: %s\n- **Likes**: %s\n- **Comments**: %s\n- **Duration**: %s\n\n",
 			v.Snippet.Title,
 			v.Id,
 			formatNumber(v.Statistics.ViewCount),
 			formatNumber(v.Statistics.LikeCount),
 			formatNumber(v.Statistics.CommentCount),
+			v.ContentDetails.Duration,
 		))
 	}
 
@@ -421,6 +422,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 		likes                   uint64
 		dislikes                uint64
 		comments                uint64
+		duration                string
 		watchTimeMinutes        float64 // Minutes watched during the analysis period.
 		avgDurationSecs         float64 // Average seconds watched per view.
 		avgViewPercent          float64 // Percentage of the video watched on average.
@@ -442,6 +444,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 			likes:    v.Statistics.LikeCount,
 			dislikes: v.Statistics.DislikeCount,
 			comments: v.Statistics.CommentCount,
+			duration: v.ContentDetails.Duration,
 		}
 
 		metrics := strings.Join(videoMetrics, ",")
@@ -511,6 +514,7 @@ func CompareVideosHandler(ctx context.Context, req *mcp.CallToolRequest, input C
 		b.WriteString(fmt.Sprintf("- **Likes**: %s\n", formatNumber(vs.likes)))
 		b.WriteString(fmt.Sprintf("- **Dislikes**: %s\n", formatNumber(vs.dislikes)))
 		b.WriteString(fmt.Sprintf("- **Comments**: %s\n", formatNumber(vs.comments)))
+		b.WriteString(fmt.Sprintf("- **Duration**: `%s`\n", vs.duration))
 		b.WriteString(fmt.Sprintf("- **Watch Time**: %.1f hours\n", vs.watchTimeMinutes/60))
 		b.WriteString(fmt.Sprintf("- **Avg Duration**: %.0f seconds\n", vs.avgDurationSecs))
 		b.WriteString(fmt.Sprintf("- **Avg View %%**: %.1f%%\n", vs.avgViewPercent))
