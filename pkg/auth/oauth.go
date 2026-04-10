@@ -17,6 +17,11 @@ import (
 const (
 	tokenFileName = "token.json"
 	tokenFileMode = 0600 // Read/write for owner only
+
+	// Environment variable names for OAuth2 credentials
+	EnvClientID     = "GOOGLE_CLIENT_ID"
+	EnvClientSecret = "GOOGLE_CLIENT_SECRET"
+	EnvRedirectURL  = "GOOGLE_REDIRECT_URL"
 )
 
 var (
@@ -34,24 +39,36 @@ var (
 	ErrSavingToken        = fmt.Errorf("failed to save token")
 	ErrReadingAuthCode    = fmt.Errorf("failed to read authorization code")
 	ErrExchangingAuthCode = fmt.Errorf("failed to exchange authorization code for token")
+	ErrMissingEnvVars     = fmt.Errorf("missing required environment variables")
 )
 
-func GetConfig(path string) (*oauth2.Config, error) {
-	credentialsData, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("%w at path '%s': %v", ErrReadingCredentials, path, err)
+// GetConfig creates an OAuth2 configuration from environment variables
+func GetConfig() (*oauth2.Config, error) {
+	clientID := os.Getenv(EnvClientID)
+	clientSecret := os.Getenv(EnvClientSecret)
+	redirectURL := os.Getenv(EnvRedirectURL)
+
+	if clientID == "" || clientSecret == "" {
+		return nil, fmt.Errorf("%w: %s and %s are required", ErrMissingEnvVars, EnvClientID, EnvClientSecret)
+	}
+
+	// Default redirect URL if not specified
+	if redirectURL == "" {
+		redirectURL = "http://localhost:8080/callback"
 	}
 
 	// Configure OAuth2 with YouTube API scopes
-	config, err := google.ConfigFromJSON(
-		credentialsData,
-		youtube.YoutubeReadonlyScope,              // Read-only access to YouTube account
-		youtube.YoutubepartnerScope,               // Partner-level access
-		youtube.YoutubeForceSslScope,              // Force SSL access
-		youtubeanalytics.YtAnalyticsReadonlyScope, // Analytics data access
-	)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrParsingCredentials, err)
+	config := &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURL:  redirectURL,
+		Scopes: []string{
+			youtube.YoutubeReadonlyScope,              // Read-only access to YouTube account
+			youtube.YoutubepartnerScope,               // Partner-level access
+			youtube.YoutubeForceSslScope,              // Force SSL access
+			youtubeanalytics.YtAnalyticsReadonlyScope, // Analytics data access
+		},
+		Endpoint: google.Endpoint,
 	}
 
 	return config, nil

@@ -71,12 +71,26 @@ scoop bucket add thejasmeetsingh https://github.com/thejasmeetsingh/yt-analytics
 scoop install thejasmeetsingh/yt-analytics-mcp
 ```
 
-### Generate or Refresh Auth Token
+### Configuration
 
-Run this command after installation to authenticate with your Google account. You can also re-run it at any time to regenerate an expired or revoked token:
+The application requires Google OAuth 2.0 credentials to be provided via environment variables:
+
+#### Required Environment Variables
 
 ```bash
-yt-analytics-mcp -credentials=/path/to/client_secret.json -token
+export GOOGLE_CLIENT_ID="your_client_id"
+export GOOGLE_CLIENT_SECRET="your_client_secret"
+export GOOGLE_REDIRECT_URL="http://localhost:8080/callback"  # Optional, defaults to http://localhost:8080/callback
+```
+
+Retrieve your `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from the OAuth 2.0 credentials JSON file you downloaded from Google Cloud Console.
+
+### Generate or Refresh Auth Token
+
+Run this command after setting the environment variables to authenticate with your Google account. You can also re-run it at any time to regenerate an expired or revoked token:
+
+```bash
+yt-analytics-mcp -token
 ```
 
 This command starts an interactive authentication flow. Here's exactly what to expect:
@@ -125,7 +139,11 @@ Add the following to your MCP settings file. For Claude Desktop this is typicall
   "mcpServers": {
     "youtube-analytics": {
       "command": "yt-analytics-mcp",
-      "args": ["-credentials", "/path/to/client_secret.json"]
+      "env": {
+        "GOOGLE_CLIENT_ID": "your_client_id_here",
+        "GOOGLE_CLIENT_SECRET": "your_client_secret_here",
+        "GOOGLE_REDIRECT_URL": "http://localhost:8080/callback"
+      }
     }
   }
 }
@@ -138,7 +156,11 @@ Add the following to your MCP settings file. For Claude Desktop this is typicall
   "mcpServers": {
     "youtube-analytics": {
       "command": "yt-analytics-mcp.exe",
-      "args": ["-credentials", "C:\\path\\to\\client_secret.json"]
+      "env": {
+        "GOOGLE_CLIENT_ID": "your_client_id_here",
+        "GOOGLE_CLIENT_SECRET": "your_client_secret_here",
+        "GOOGLE_REDIRECT_URL": "http://localhost:8080/callback"
+      }
     }
   }
 }
@@ -291,11 +313,11 @@ Returns:
 
 ## Troubleshooting
 
-### "API key not valid" error
+### "Missing required environment variables" error
 
-- Verify your `client_secret.json` file is correct and not corrupted
-- Confirm that YouTube Data API v3 and YouTube Analytics API are both enabled in your Google Cloud project
-- Check that the OAuth client has not been deleted or disabled
+- Ensure `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in your environment
+- Verify the values are correct and not truncated
+- Check that the OAuth client has not been deleted or disabled in Google Cloud Console
 
 ### "Channel not found" error
 
@@ -319,7 +341,7 @@ Returns:
 
 - Re-run the token command and follow the step-by-step flow described in the [Generate or Refresh Auth Token](#generate-or-refresh-auth-token) section above — this works for both first-time setup and expired or revoked tokens:
   ```bash
-  yt-analytics-mcp -credentials=/path/to/client_secret.json -token
+  yt-analytics-mcp -token
   ```
 - Make sure your Google account is listed as a test user in the OAuth consent screen
 - If you haven't used the app in a while, your token may have expired — regenerating it via the command above is all that's needed

@@ -11,15 +11,14 @@ import (
 )
 
 var (
-	clientSecretPath = flag.String("credentials", "", "Path of your google account 'client_secret.json' credentials file")
-	generateToken    = flag.Bool("token", false, "if set, Generates google auth token")
+	generateToken = flag.Bool("token", false, "if set, Generates google auth token")
 )
 
 func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	if err := cmd.Run(clientSecretPath, generateToken); err != nil {
+	if err := cmd.Run(generateToken); err != nil {
 		log.Fatalf("Application failed: %v", err)
 		return
 	}
